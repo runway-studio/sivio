@@ -1,0 +1,362 @@
+[
+  {
+    "id": "F01",
+    "capability": "desktop-shell",
+    "title": "统一应用与导航",
+    "task": "T05",
+    "milestone": "M1",
+    "source": "CC/CV",
+    "success": "在一个主窗口和托盘访问 AI 与网络功能，切换页面保留状态，无需安装原版两个 GUI",
+    "failure": "重复启动只激活现有实例，窗口重建不启动第二个内核"
+  },
+  {
+    "id": "F02",
+    "capability": "desktop-shell",
+    "title": "窗口托盘与快捷键",
+    "task": "T05",
+    "milestone": "M1",
+    "source": "CC-SET/CV",
+    "success": "关闭隐藏、开机自启、静默启动、轻量模式、菜单与快捷键均可配置；托盘能切换支持的供应商及网络节点",
+    "failure": "销毁再建窗口不丢设置或重复订阅事件；快捷键冲突显示失败原因"
+  },
+  {
+    "id": "F03",
+    "capability": "desktop-shell",
+    "title": "外观语言和编辑体验",
+    "task": "T25",
+    "milestone": "M3",
+    "source": "CC-SET/CV",
+    "success": "支持主题明暗、颜色、图标、受限 CSS 和基线语言包，中文英文关键流程无缺词；表单离开提醒未保存，YAML 编辑有诊断和补全",
+    "failure": "无效 CSS 可一键恢复；超大或错误 YAML 不阻塞整个窗口"
+  },
+  {
+    "id": "F04",
+    "capability": "desktop-shell",
+    "title": "更新关于与诊断入口",
+    "task": "T25",
+    "milestone": "M3",
+    "source": "CC-SET/CV",
+    "success": "一个应用更新入口，展示版本、变更记录、来源许可、诊断导出；自己的签名包更新后保留数据",
+    "failure": "未配置更新源显示不可用；错误签名/架构包被拒绝且旧应用可继续使用"
+  },
+  {
+    "id": "F05",
+    "capability": "ai-tools",
+    "title": "供应商配置全流程",
+    "task": "T08",
+    "milestone": "M1",
+    "source": "CC",
+    "success": "每个受支持工具可添加预设/自定义供应商、编辑、复制、搜索、排序、导入导出、模型与端点选择，并查看生效配置预览",
+    "failure": "非法配置阻止应用；切换前后未知字段和注释保留；无权限时原文件 hash 不变"
+  },
+  {
+    "id": "F06",
+    "capability": "ai-tools",
+    "title": "十种客户端与能力边界",
+    "task": "T19",
+    "milestone": "M3",
+    "source": "CC",
+    "success": "完成coverage.md 客户端表的所有支持组合；互斥工具切换、共存工具增删；显示重启要求；Claude Desktop 支持直连和模型映射",
+    "failure": "不支持的组合明确禁用；缺失客户端显示安装入口而非假成功；官方账号恢复不混用第三方 Key"
+  },
+  {
+    "id": "F07",
+    "capability": "ai-tools",
+    "title": "客户端发现安装升级和终端",
+    "task": "T19",
+    "milestone": "M3",
+    "source": "CC-SET",
+    "success": "检测版本、路径、安装来源；逐个及批量安装升级；支持原 macOS 终端偏好与不可用时回退；路径有空格亦可启动",
+    "failure": "受管安装失败按快照恢复；不可回滚安装器失败标记需要修复并提供重装或修复入口，不宣称旧版必然保留；未知来源不覆盖，参数不能注入 shell"
+  },
+  {
+    "id": "F08",
+    "capability": "ai-tools",
+    "title": "MCP 统一管理",
+    "task": "T17",
+    "milestone": "M2",
+    "source": "CC",
+    "success": "添加编辑删除、模板导入、已有配置导入、搜索、按工具及批量启停，正确同步支持的客户端格式",
+    "failure": "部分目标不可写时逐项报告并恢复该目标；禁用只删除本 App 管理且未被外部改写的字段"
+  },
+  {
+    "id": "F09",
+    "capability": "ai-tools",
+    "title": "Skills 发现安装同步更新",
+    "task": "T17",
+    "milestone": "M2",
+    "source": "CC",
+    "success": "从 skills.sh/GitHub/ZIP 发现安装、检查及批量更新，支持通用目录、软链接/复制/自动策略，卸载可恢复备份",
+    "failure": "ZIP 路径穿越和逃逸软链接被拒绝；已有同名用户文件不静默覆盖；网络失败保留旧版本"
+  },
+  {
+    "id": "F10",
+    "capability": "ai-tools",
+    "title": "提示词和专属工作区",
+    "task": "T18",
+    "milestone": "M2",
+    "source": "CC/CC-WS",
+    "success": "维护每个支持客户端提示词库与启用文件；Pi 模板和系统提示词、OpenClaw 九种工作区文件及每日记忆、Hermes 记忆能搜索编辑保存",
+    "failure": "启用前保存原内容；日期与路径校验；编辑期间外部改动产生冲突，不直接覆盖"
+  },
+  {
+    "id": "F11",
+    "capability": "ai-tools",
+    "title": "项目配置切换",
+    "task": "T20",
+    "milestone": "M3",
+    "source": "CC",
+    "success": "Claude Code/Codex 保存和切换供应商、MCP、Skills、提示词快照，Claude Desktop 保存供应商；切走前保存当前项目状态",
+    "failure": "任一步应用失败保留旧活动项目和恢复记录，不显示整个项目切换成功"
+  },
+  {
+    "id": "F12",
+    "capability": "ai-tools",
+    "title": "会话浏览检索恢复和导出",
+    "task": "T21",
+    "milestone": "M3",
+    "source": "CC",
+    "success": "按基线支持范围浏览、项目时间分组、全文搜索、结构化阅读、复制、Markdown 导出、删除及终端恢复",
+    "failure": "损坏记录跳过并提示；OpenClaw/Hermes 不提供不受支持的恢复；删除前确认并明确不可恢复性"
+  },
+  {
+    "id": "F13",
+    "capability": "ai-tools",
+    "title": "用量成本余额和额度",
+    "task": "T22",
+    "milestone": "M3",
+    "source": "CC",
+    "success": "解析本地会话与路由记录，按工具/供应商/模型统计请求Token缓存速度成本，支持趋势热力图、自定义定价和额度倒计时/脚本",
+    "failure": "未知价格显示未知而非0；同一请求不重复计费；脚本失败显示时间和原因且不影响正常路由"
+  },
+  {
+    "id": "F14",
+    "capability": "ai-tools",
+    "title": "授权中心与多账号",
+    "task": "T23",
+    "milestone": "M3",
+    "source": "CC-SET",
+    "success": "按上游支持范围提供 Copilot/ChatGPT/xAI 登录、刷新、默认账号和退出，账号与供应商绑定；实验接入首次使用展示明确说明",
+    "failure": "取消/过期/拒绝授权无残留生效配置；退出清理本地凭据；不将第三方账号 token 发给其他供应商"
+  },
+  {
+    "id": "F15",
+    "capability": "ai-tools",
+    "title": "工具专属增强和环境诊断",
+    "task": "T20",
+    "milestone": "M3",
+    "source": "CC-SET/CC",
+    "success": "覆盖配置目录覆盖、环境冲突检测处理、Claude 插件同步与初始化选项、Codex 登录保留/历史迁移，以及上游 OpenClaw/Hermes/Pi/OMO 专属配置入口",
+    "failure": "迁移前备份并支持恢复；不支持的版本拒绝写入并说明；不清空无关环境变量"
+  },
+  {
+    "id": "F16",
+    "capability": "ai-routing",
+    "title": "直连路由聚合模式",
+    "task": "T11",
+    "milestone": "M2",
+    "source": "CC",
+    "success": "独立为支持客户端切换直连/路由/聚合，聚合模型唯一映射并有默认供应商，明确重启需求和官方限制",
+    "failure": "仅切换查看页签不得修改配置；仍有客户端接入时直接停止服务被阻止并提供全部回直连操作"
+  },
+  {
+    "id": "F17",
+    "capability": "ai-routing",
+    "title": "协议转换与流式请求",
+    "task": "T11",
+    "milestone": "M2",
+    "source": "CC",
+    "success": "按基线方向支持 Anthropic/OpenAI Chat/Responses/Gemini 协议，保留流式顺序、工具调用ID、取消和错误语义，整流行为可追踪",
+    "failure": "不支持的多模态/工具组合返回具体错误而非伪造成功；客户端取消终止上游读取"
+  },
+  {
+    "id": "F18",
+    "capability": "ai-routing",
+    "title": "故障转移健康与连通探测",
+    "task": "T12",
+    "milestone": "M2",
+    "source": "CC/CC-TEST",
+    "success": "路由模式按队列、超时和熔断策略切换；连通检测与真实请求健康分开；聚合按模型归属路由而不自动故障转移",
+    "failure": "401/403 的可达探测不标记鉴权成功，不改变熔断；失败重试有总次数和截止时间"
+  },
+  {
+    "id": "F19",
+    "capability": "network-proxy",
+    "title": "订阅和配置档案",
+    "task": "T09",
+    "milestone": "M1",
+    "source": "CV/CV-UI",
+    "success": "URL/本地文件/链接导入、创建编辑复制排序删除、手动和定时更新，显示订阅使用量到期信息，配置预览及切换",
+    "failure": "下载失败或 YAML 校验失败保留上次可用配置和激活指针；不同订阅同名节点不互相污染"
+  },
+  {
+    "id": "F20",
+    "capability": "network-proxy",
+    "title": "配置增强及规则节点编辑",
+    "task": "T13",
+    "milestone": "M2",
+    "source": "CV",
+    "success": "支持全局和订阅 Merge/Script、规则/节点/代理组编辑；生成运行配置和处理日志；标明应用拥有字段的覆盖优先级",
+    "failure": "脚本超时、非法规则、循环代理链不发布；运行配置可回退到上次有效快照"
+  },
+  {
+    "id": "F21",
+    "capability": "network-proxy",
+    "title": "节点代理组测速与链式代理",
+    "task": "T14",
+    "milestone": "M2",
+    "source": "CV/CV-UI",
+    "success": "显示代理组、节点选择、延迟测试、规则/全局/直连模式、链式代理；重启恢复所选节点",
+    "failure": "节点失效或测速超时显示独立错误；组被订阅更新删除时按该组策略回退并通知"
+  },
+  {
+    "id": "F22",
+    "capability": "network-proxy",
+    "title": "系统代理PAC和守卫",
+    "task": "T15",
+    "milestone": "M2",
+    "source": "CV/CV-UI",
+    "success": "按网络服务启停 HTTP/SOCKS/PAC 和守卫、设置绕过项、复制终端代理变量，UI 展示实际系统状态",
+    "failure": "用户或其他 App 改变系统代理时暂停争抢并提示；退出仅恢复本 App 仍拥有的设置"
+  },
+  {
+    "id": "F23",
+    "capability": "network-proxy",
+    "title": "TUN权限服务与修复",
+    "task": "T16",
+    "milestone": "M2",
+    "source": "CV-SVC",
+    "success": "安装/启动/停止/修复/卸载独立 helper，授权后启用 TUN 并验证 DNS/路由，支持普通 sidecar 降级",
+    "failure": "拒绝权限仍可使用普通代理；未知客户端身份/任意可执行路径被拒绝；服务故障不假报 TUN 正常"
+  },
+  {
+    "id": "F24",
+    "capability": "network-proxy",
+    "title": "DNS端口LAN和高级网络设置",
+    "task": "T16",
+    "milestone": "M2",
+    "source": "CV/CV-UI",
+    "success": "支持 DNS 编辑校验/覆盖、端口、接口、IPv6、LAN、日志级别、TUN 可配置参数和上游 macOS 高级设置",
+    "failure": "端口被占用时不杀外部进程；LAN 默认关闭；无效 DNS 不覆盖最后有效配置"
+  },
+  {
+    "id": "F25",
+    "capability": "network-proxy",
+    "title": "连接流量日志与规则观察",
+    "task": "T14",
+    "milestone": "M2",
+    "source": "CV/CV-UI",
+    "success": "展示实时流量、连接搜索/详情/单个和全部关闭、匹配规则及日志过滤，后台缓冲有上限",
+    "failure": "断开内核显示过期状态并重新订阅；关闭页面取消订阅，不能重复累计流量"
+  },
+  {
+    "id": "F26",
+    "capability": "network-proxy",
+    "title": "内核版本启停与升级",
+    "task": "T10",
+    "milestone": "M1",
+    "source": "CV",
+    "success": "安装固定校验的 Mihomo 稳定版/Alpha，启动停止重启及切换，展示版本、架构、PID和健康状态",
+    "failure": "下载摘要/架构错误或新内核启动失败时恢复旧版本；不得同时启两个占同端口内核"
+  },
+  {
+    "id": "F27",
+    "capability": "network-proxy",
+    "title": "网络和媒体可用性检测",
+    "task": "T24",
+    "milestone": "M3",
+    "source": "CV-UI",
+    "success": "提供上游检测列表、单项/批量检测、取消和结果时间，区分区域、连通、未知及受限制",
+    "failure": "超时和目标服务错误标为未知/失败，不宣称一定解锁；检测使用选定出口"
+  },
+  {
+    "id": "F28",
+    "capability": "data-lifecycle",
+    "title": "两项目迁移与格式兼容",
+    "task": "T07",
+    "milestone": "M1",
+    "source": "CC-SET/CV-UI",
+    "success": "只读扫描、选择来源、预览冲突、备份、导入；兼容基线 SQL/配置归档；重复导入不产生重复实体",
+    "failure": "不支持的 schema 和损坏归档拒绝导入，旧 App 数据及原客户端文件保持原样"
+  },
+  {
+    "id": "F29",
+    "capability": "data-lifecycle",
+    "title": "本地备份恢复和清理",
+    "task": "T06",
+    "milestone": "M1",
+    "source": "CC-SET/CV-UI",
+    "success": "支持即时/定时备份、保留策略、列表重命名删除、导入导出、其他备份占用浏览，恢复前自动备份并校验 manifest",
+    "failure": "磁盘满/备份损坏时恢复不开始；备份清理不得删除当前 pending journal 所依赖文件"
+  },
+  {
+    "id": "F30",
+    "capability": "data-lifecycle",
+    "title": "WebDAV和S3同步",
+    "task": "T24",
+    "milestone": "M3",
+    "source": "CC-SET/CV",
+    "success": "支持连接测试、手动上传下载、自动同步和远程快照预览；WebDAV/S3 二选一；同时备份 AI 和网络数据",
+    "failure": "远程版本冲突不静默覆盖；失败可重试；运行状态和 helper 凭据不上传，默认不包含用户秘密"
+  },
+  {
+    "id": "F31",
+    "capability": "data-lifecycle",
+    "title": "密钥与导出隐私",
+    "task": "T06",
+    "milestone": "M1",
+    "source": "本项目设计",
+    "success": "Keychain 保存新凭据，界面默认掩码；外部必须明文的 live 文件0600；诊断脱敏，导出明确是否含密钥",
+    "failure": "Keychain 锁定时阻止需要密钥的动作并提示；日志不得出现完整 token、订阅URL中的秘密或会话正文"
+  },
+  {
+    "id": "F32",
+    "capability": "integration-runtime",
+    "title": "AI与网络出口协作",
+    "task": "T04",
+    "milestone": "M0",
+    "source": "本项目设计",
+    "success": "direct/managed-network/custom-proxy 明确可选；managed-network 经指定内核出口；AI与网络状态分别呈现",
+    "failure": "网络服务不可用时 managed-network 请求失败而不直接出网；本地回环和控制流量不会形成递归"
+  },
+  {
+    "id": "F33",
+    "capability": "integration-runtime",
+    "title": "外部配置并发与事务恢复",
+    "task": "T06",
+    "milestone": "M1",
+    "source": "CC/CV",
+    "success": "基线hash校验、staging、journal、原子发布与运行验证；并发变更按资源串行，活动状态仅在提交后更新",
+    "failure": "任一文件失败或进程中断后可确定恢复；外部修改不得被回滚误覆盖"
+  },
+  {
+    "id": "F34",
+    "capability": "integration-runtime",
+    "title": "退出崩溃与睡眠恢复",
+    "task": "T18",
+    "milestone": "M2",
+    "source": "CC/CV",
+    "success": "关闭窗口服务持续，明确退出按顺序恢复CLI和系统网络；唤醒重新核对实际状态，事件按generation去重",
+    "failure": "强杀后 helper lease 恢复网络；CLI待下次启动恢复且可离线手动修复；不无限重启或静默直连"
+  },
+  {
+    "id": "F35",
+    "capability": "integration-runtime",
+    "title": "不可信输入与系统边界",
+    "task": "T13",
+    "milestone": "M2",
+    "source": "本项目设计",
+    "success": "链接导入有预览，脚本限制权限和资源，ZIP路径/Markdown/CSS安全处理；IPC有参数校验和最小能力权限",
+    "failure": "恶意脚本/链接不能执行系统命令或访问 root helper；取消不遗留后台写入"
+  },
+  {
+    "id": "F36",
+    "capability": "integration-runtime",
+    "title": "安装升级卸载及验收平台",
+    "task": "T28",
+    "milestone": "M4",
+    "source": "SIGN/本项目设计",
+    "success": "macOS12+两架构完成安装启动更新回退卸载；内核/helper独立身份；卸载先恢复网络并允许保留用户数据",
+    "failure": "错误签名包拒绝；权限撤销/服务遗留有修复流程；不得删除原版 App 或其服务和数据"
+  }
+]

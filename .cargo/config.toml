@@ -1,0 +1,6 @@
+[source.rsproxy]
+registry = "sparse+https://rsproxy.cn/index/"
+
+[build]
+target-dir = "build/cache/target"
+jobs = 4

@@ -1,0 +1,2057 @@
+--- vendor/upstream/clash-verge-service-ipc/src/bin/install_service.rs
++++ native/helper/src/bin/install_service.rs
+@@ -239,6 +239,7 @@
+ }
+ 
+ struct InstallOptions {
++    client_hashes: Vec<String>,
+     install_service: bool,
+     #[cfg(windows)]
+     ensure_service: bool,
+@@ -248,6 +249,7 @@
+ 
+ fn parse_install_arguments(arguments: impl Iterator<Item = std::ffi::OsString>) -> Result<InstallOptions, Error> {
+     let mut requested: Vec<CoreInstallRequest> = Vec::new();
++    let mut client_hashes=Vec::new();
+     let mut install_service = false;
+     #[cfg(windows)]
+     let mut ensure_service = false;
+@@ -286,6 +288,10 @@
+             }
+             #[cfg(not(windows))]
+             bail!("--ensure-service is only supported on Windows");
++        } else if argument == "--client-cdhash" {
++            let hash=arguments.next().context("client hash required")?.into_string().map_err(|_|anyhow::anyhow!("invalid client hash"))?;
++            anyhow::ensure!(hash.len()==40 && hash.bytes().all(|b|b.is_ascii_hexdigit()),"invalid client hash");
++            client_hashes.push(hash);
+         } else if argument == "--debug" {
+             debug = true;
+         } else {
+@@ -293,6 +299,7 @@
+         }
+     }
+     Ok(InstallOptions {
++        client_hashes,
+         install_service: install_service || requested.is_empty(),
+         #[cfg(windows)]
+         ensure_service,
+@@ -739,6 +746,17 @@
+ 
+ #[cfg(target_os = "macos")]
+ fn main() -> Result<(), Error> {
++    if clash_verge_service_ipc::management::prepare_maintenance_if_requested()? {return Ok(())}
++    let validation_args=std::env::args_os().skip(1).collect::<Vec<_>>();
++    let validation=validation_args.first().and_then(|argument| argument.to_str());
++    if validation_args.len()==1 && matches!(validation,Some("--crash-validation"|"--expired-crash-validation")) {
++        anyhow::ensure!(unsafe{platform_lib::geteuid()}==0,"crash validation requires system authorization");
++        if validation==Some("--expired-crash-validation") {
++            run_command("/bin/launchctl", &["kill","SIGSTOP",&launchd_service_target()],false)?;
++            std::thread::sleep(std::time::Duration::from_secs(35));
++        }
++        return run_command("/bin/launchctl", &["kill","SIGKILL",&launchd_service_target()],false);
++    }
+     if clash_verge_service_ipc::management::prepare_install_if_requested()? {
+         return Ok(());
+     }
+@@ -794,6 +812,7 @@
+         run_command("launchctl", &["bootout", &launchd_service_target()], debug)?;
+     }
+     shared::repair_active_owner_state()?;
++    { let runtime=tokio::runtime::Runtime::new()?; runtime.block_on(clash_verge_service_ipc::recover_after_service_stop())?; }
+     // Staged where the service is already down, so a core it was running no longer holds its file.
+     install_service_cores(&options.cores)?;
+     publish_staged_binary(&staged, &target_binary_path)?;
+@@ -810,6 +829,9 @@
+     set_macos_permissions(&bundle_path, 0o755)?;
+     set_macos_owner_recursive(&bundle_path)?;
+ 
++    if !options.client_hashes.is_empty() {
++        clash_verge_service_ipc::register_trusted_clients(options.client_hashes.clone())?;
++    }
+     let launchd_target = launchd_service_target();
+     run_command("launchctl", &["enable", &launchd_target], debug)?;
+     run_command("launchctl", &["bootstrap", "system", &plist_path], debug)?;
+@@ -1360,7 +1382,7 @@
+     fn missing_launchd_service_skips_bootout() {
+         let plan = classify_launchd_service_probe(
+             Some(113),
+-            "Could not find service \"io.github.clash-verge-rev.clash-verge-rev.service\" in domain for system",
++            "Could not find service \"local.siassist.desktop.service\" in domain for system",
+         )
+         .unwrap();
+ 
+--- vendor/upstream/clash-verge-service-ipc/src/bin/shared/mod.rs
++++ native/helper/src/bin/shared/mod.rs
+@@ -32,24 +32,7 @@
+ 
+ #[cfg(all(target_os = "macos", not(feature = "development-channel")))]
+ pub fn uninstall_old_service() -> Result<(), Error> {
+-    use std::path::Path;
+-
+-    let target_binary_path = "/Library/PrivilegedHelperTools/io.github.clashverge.helper";
+-    let plist_file = "/Library/LaunchDaemons/io.github.clashverge.helper.plist";
+-
+-    run_command("launchctl", &["stop", "io.github.clashverge.helper"], false)?;
+-    run_command("launchctl", &["bootout", "system", plist_file], false)?;
+-    run_command("launchctl", &["disable", "system/io.github.clashverge.helper"], false)?;
+-
+-    if Path::new(plist_file).exists() {
+-        std::fs::remove_file(plist_file).map_err(|e| anyhow::anyhow!("Failed to remove plist file: {}", e))?;
+-    }
+-
+-    if Path::new(target_binary_path).exists() {
+-        std::fs::remove_file(target_binary_path)
+-            .map_err(|e| anyhow::anyhow!("Failed to remove service binary: {}", e))?;
+-    }
+-
++    // A SI Assist install must never remove another application's helper.
+     Ok(())
+ }
+ 
+--- vendor/upstream/clash-verge-service-ipc/src/bin/si-helper-control.rs
++++ native/helper/src/bin/si-helper-control.rs
+@@ -0,0 +1,81 @@
++//! Local validation client and installation bridge; it never accepts a core executable from IPC.
++use anyhow::{Context,Result,ensure};
++use clash_verge_service_ipc as ipc;
++use std::{path::PathBuf,io::Read};
++
++fn root()->Result<PathBuf> {
++    let root=std::env::var_os("SI_VALIDATION_ROOT").map(PathBuf::from).context("SI_VALIDATION_ROOT is required")?;
++    std::fs::create_dir_all(&root)?;
++    #[cfg(unix)] {use std::os::unix::fs::PermissionsExt;std::fs::set_permissions(&root,std::fs::Permissions::from_mode(0o700))?;}
++    Ok(root.canonicalize()?)
++}
++fn credentials()->Result<ipc::OwnerCredentials> {
++    Ok(ipc::OwnerCredentials{identity:ipc::OwnerIdentity::Unix{uid:unsafe{libc_uid()},gid:unsafe{libc_gid()}},app_data_dir:root()?.to_string_lossy().into_owned(),token:None})
++}
++unsafe fn libc_uid()->u32{unsafe{platform_lib::geteuid()}}
++unsafe fn libc_gid()->u32{unsafe{platform_lib::getegid()}}
++fn proof()->Result<ipc::OwnerSessionProof> {Ok(serde_json::from_slice(&std::fs::read(root()?.join("session.json"))?)?)}
++fn cdhash()->Result<String> {
++    let output=std::process::Command::new("/usr/bin/codesign").args(["-d","--verbose=4"]).arg(std::env::current_exe()?).output()?;
++    ensure!(output.status.success(),"validation client must be ad-hoc signed before installation");
++    String::from_utf8(output.stderr)?.lines().find_map(|line|line.strip_prefix("CDHash=").map(str::to_owned)).context("client CDHash unavailable")
++}
++#[tokio::main]
++async fn main()->Result<()> {
++    let args=std::env::args().collect::<Vec<_>>();
++    match args.get(1).map(String::as_str) {
++        Some("install")=>{
++            let installer=std::env::current_exe()?.with_file_name("clash-verge-service-install");
++            let core=PathBuf::from(args.get(2).context("install requires a verified core source")?);
++            let hash=cdhash()?;
++            let mut command=std::process::Command::new(installer);
++            command.args(["--prepare-install","--prompt","SI Assist 安装独立网络服务以验证 TUN 与崩溃恢复","--client-cdhash",&hash]);
++            if let Some(app_hash)=args.get(3){command.args(["--client-cdhash",app_hash]);}
++            let status=command.args(["--core","verge-mihomo"]).arg(core).status()?;
++            ensure!(status.success(),"installation was refused or failed");
++            println!("helper installed with explicitly trusted validation client");
++        },
++        Some("crash-helper")|Some("expired-crash-helper")=>{let installer=std::env::current_exe()?.with_file_name("clash-verge-service-install");ensure!(std::process::Command::new(installer).arg(if args[1]=="expired-crash-helper"{"--prepare-expired-crash-validation"}else{"--prepare-crash-validation"}).status()?.success(),"crash validation failed or refused");},
++        Some("control")=>{let method=args.get(2).context("control method required")?;let path=args.get(3).context("control path required")?;let body=args.get(4).map(|b|serde_json::from_str(b)).transpose()?;let response=ipc::control_mihomo(&credentials()?,&proof()?,&ipc::MihomoControlRequest{method:method.clone(),path:path.clone(),body}).await?;ensure!(response.code==0,"control rejected: {}",response.message);println!("{}",serde_json::to_string(&response.data)?);},
++        Some("proxy")=>{let response=ipc::set_system_proxy(&credentials()?,&proof()?,&ipc::MacosProxyConfig::Global{host:"127.0.0.1".into(),port:15782,bypass:"localhost,127.*,::1".into()}).await?;ensure!(response.code==0,"proxy apply rejected: {}",response.message);println!("owned proxy applied");},
++        Some("logs")=>{let response=ipc::get_clash_logs(&credentials()?).await?;ensure!(response.code==0,"logs rejected");println!("{}",serde_json::to_string(&response.data)?);},
++        Some("status")=>{let response=ipc::get_status(&credentials()?).await?;println!("{}",serde_json::to_string(&response)?);},
++        Some("version")=>println!("{}",serde_json::to_string(&ipc::get_version().await?)?),
++        Some("start")=>{
++            let yaml=std::fs::read_to_string(args.get(2).context("start requires a YAML file")?)?;
++            let mut bytes=[0u8;32];std::fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
++            let token=bytes.iter().map(|b|format!("{b:02x}")).collect::<String>();
++            let core=ipc::service_paths()?.core_dir().join("verge-mihomo");
++            let response=ipc::start_clash(&credentials()?,&ipc::StartClashRequest{
++                runtime:ipc::RuntimeBundle{yaml,assets:vec![],remote_providers:vec![],core_path:core.to_string_lossy().into_owned()},
++                proposed_session_token:token.clone(),macos_proxy:if args.get(3).map(String::as_str)==Some("proxy") {Some(ipc::MacosProxyConfig::Global{host:"127.0.0.1".into(),port:15782,bypass:"localhost,127.*,::1".into()})}else{None},
++            }).await?;
++            ensure!(response.code==0,"start rejected: {}",response.message);
++            let generation=response.data.context("start omitted session")?.session.generation;
++            let session=ipc::OwnerSessionProof{generation,token};
++            let path=root()?.join("session.json");
++            use std::os::unix::fs::OpenOptionsExt;use std::io::Write;
++            let mut out=std::fs::OpenOptions::new().create(true).truncate(true).write(true).mode(0o600).open(path)?;
++            out.write_all(&serde_json::to_vec(&session)?)?;out.sync_all()?;
++            println!("generation {generation} started");
++        },
++        Some("renew")=>{let response=ipc::renew_owner(&credentials()?,&proof()?).await?;ensure!(response.code==0,"renewal rejected: {}",response.message);println!("renewed");},
++        Some("watch")=>{
++            let seconds=args.get(2).map(|s|s.parse::<u64>()).transpose()?.unwrap_or(60);
++            let started=std::time::Instant::now();
++            let mut last_good=std::time::Instant::now();
++            while started.elapsed().as_secs()<seconds {
++                match ipc::renew_owner(&credentials()?,&proof()?).await {
++                    Ok(response) if response.code==0=>last_good=std::time::Instant::now(),
++                    Ok(response)=>anyhow::bail!("renewal rejected: {}",response.message),
++                    Err(_)=>{ensure!(last_good.elapsed().as_secs()<25,"helper renewal unavailable for 25 seconds");eprintln!("transient helper disconnect; retrying");}
++                }
++                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
++            }
++            println!("renewal watch completed");
++        },
++        Some("stop")=>{let response=ipc::stop_clash(&credentials()?,&proof()?).await?;ensure!(response.code==0,"stop rejected: {}",response.message);println!("stopped");},
++        _=>anyhow::bail!("use install <core> | version | status | start <yaml> | renew | watch <seconds> | stop"),
++    }
++    Ok(())
++}
+--- vendor/upstream/clash-verge-service-ipc/src/bin/uninstall_service.rs
++++ native/helper/src/bin/uninstall_service.rs
+@@ -109,11 +109,13 @@
+     use std::env;
+     use std::path::Path;
+ 
++    #[cfg(feature="client")]
++    if clash_verge_service_ipc::management::prepare_maintenance_if_requested()? {return Ok(())}
+     if run_maintenance_if_requested()? {
+         return Ok(());
+     }
+     let _gate = enter_repair_gate()?;
+-    let debug = env::args().any(|arg| arg == "--debug");
++    let debug = env::args_os().any(|arg| arg == "--debug");
+ 
+     #[cfg(not(feature = "development-channel"))]
+     let _ = uninstall_old_service();
+@@ -131,6 +133,11 @@
+     let _ = run_command("launchctl", &["disable", &format!("system/{}", service_id)], debug);
+     let _ = run_command("launchctl", &["bootout", &format!("system/{}", service_id)], debug);
+ 
++    let rt=tokio::runtime::Builder::new_current_thread().enable_all().build()?;
++    let _owner_guard=rt.block_on(clash_verge_service_ipc::acquire_service_owner())?
++        .ok_or_else(||anyhow::anyhow!("service is still running; refusing uninstall before recovery"))?;
++    rt.block_on(clash_verge_service_ipc::recover_after_service_stop())?;
++
+     if Path::new(&plist_file).exists() {
+         std::fs::remove_file(&plist_file).map_err(|e| anyhow::anyhow!("Failed to remove plist file: {}", e))?;
+     }
+@@ -140,6 +147,7 @@
+             .map_err(|e| anyhow::anyhow!("Failed to remove bundle directory: {}", e))?;
+     }
+ 
++    drop(_owner_guard);
+     if let Err(error) = shared::repair_active_owner_state() {
+         eprintln!("Warning: failed to repair active owner state during uninstall: {error:#}");
+     }
+@@ -156,7 +164,7 @@
+         return Ok(());
+     }
+     let _gate = enter_repair_gate()?;
+-    let debug = env::args().any(|arg| arg == "--debug");
++    let debug = env::args_os().any(|arg| arg == "--debug");
+     let service_name = clash_verge_service_ipc::SERVICE_SLUG;
+ 
+     let _ = run_command("systemctl", &["stop", &format!("{}.service", service_name)], debug);
+--- vendor/upstream/clash-verge-service-ipc/src/channel.rs
++++ native/helper/src/channel.rs
+@@ -11,21 +11,21 @@
+ #[cfg(not(feature = "development-channel"))]
+ pub const CHANNEL_IDENTITY: ChannelIdentity = ChannelIdentity {
+     id: "production",
+-    service_slug: "clash-verge-service",
++    service_slug: "si-assist-service",
+     windows_service_name: "clash_verge_service",
+-    service_display_name: "Clash Verge Service",
+-    macos_app_bundle_id: "io.github.clash-verge-rev.clash-verge-rev",
+-    macos_service_id: "io.github.clash-verge-rev.clash-verge-rev.service",
++    service_display_name: "SI Assist Service",
++    macos_app_bundle_id: "local.siassist.desktop",
++    macos_service_id: "local.siassist.desktop.service",
+ };
+ 
+ #[cfg(feature = "development-channel")]
+ pub const CHANNEL_IDENTITY: ChannelIdentity = ChannelIdentity {
+     id: "development",
+-    service_slug: "clash-verge-service-dev",
++    service_slug: "si-assist-service-dev",
+     windows_service_name: "clash_verge_service_dev",
+-    service_display_name: "Clash Verge Development Service",
+-    macos_app_bundle_id: "io.github.clash-verge-rev.clash-verge-rev.dev",
+-    macos_service_id: "io.github.clash-verge-rev.clash-verge-rev.dev.service",
++    service_display_name: "SI Assist Development Service",
++    macos_app_bundle_id: "local.siassist.desktop.dev",
++    macos_service_id: "local.siassist.desktop.dev.service",
+ };
+ 
+ pub const SERVICE_SLUG: &str = CHANNEL_IDENTITY.service_slug;
+@@ -41,7 +41,7 @@
+     #[test]
+     fn compiled_channel_has_a_self_consistent_identity() {
+         assert!(!CHANNEL_IDENTITY.id.is_empty());
+-        assert!(CHANNEL_IDENTITY.service_slug.starts_with("clash-verge-service"));
++        assert!(CHANNEL_IDENTITY.service_slug.starts_with("si-assist-service"));
+         assert!(CHANNEL_IDENTITY.windows_service_name.starts_with("clash_verge_service"));
+         assert!(
+             CHANNEL_IDENTITY
+--- vendor/upstream/clash-verge-service-ipc/src/client/mod.rs
++++ native/helper/src/client/mod.rs
+@@ -196,6 +196,9 @@
+     protected_call(Verb::Get, IpcCommand::GetClashLogs, credentials, None, (), None).await
+ }
+ 
++pub async fn get_clash_logs_since(credentials: &OwnerCredentials, cursor: &crate::log_cursor::LogCursor) -> Result<Response<crate::log_cursor::LogBatch>> {
++    protected_call(Verb::Get, IpcCommand::GetClashLogsSince, credentials, None, cursor.clone(), None).await
++}
+ pub async fn get_clash_log_snapshot(credentials: &OwnerCredentials) -> Result<Response<String>> {
+     protected_call(Verb::Get, IpcCommand::GetClashLogSnapshot, credentials, None, (), None).await
+ }
+@@ -311,3 +314,10 @@
+         .data
+         .ok_or_else(|| anyhow::anyhow!("service omitted installation status"))
+ }
++
++/// Renew only the authenticated, currently active generation; callers schedule every five seconds.
++pub async fn renew_owner(credentials: &OwnerCredentials, session: &OwnerSessionProof) -> Result<Response<()>> {
++    protected_call(Verb::Post, IpcCommand::RenewOwner, credentials, Some(session), (), None).await
++}
++
++pub async fn control_mihomo(credentials:&OwnerCredentials,session:&OwnerSessionProof,request:&crate::MihomoControlRequest)->Result<Response<serde_json::Value>> {protected_call(Verb::Post,IpcCommand::MihomoControl,credentials,Some(session),request.clone(),Some(Duration::from_secs(10))).await}
+--- vendor/upstream/clash-verge-service-ipc/src/core/auth.rs
++++ native/helper/src/core/auth.rs
+@@ -135,6 +135,8 @@
+             .uid
+             .zip(context.client_info.peer_credentials.gid);
+         validate_unix_identity(&credentials.identity, peer)?;
++        #[cfg(all(target_os="macos",not(feature="test"),not(test)))]
++        super::trusted_client::verify(context).map_err(|e|ServiceError::unauthorized(format!("caller signature is not trusted for SI Assist: {e}")))?;
+ 
+         let app_data_root = std::fs::canonicalize(&credentials.app_data_dir)
+             .map_err(|_| ServiceError::unauthorized("application data root is unavailable"))?;
+@@ -555,6 +557,7 @@
+                 peer_credentials: PeerCredentials {
+                     uid: Some(uid),
+                     gid: Some(gid),
++                    audit_token: None,
+                 },
+             },
+             timestamp: Instant::now(),
+--- vendor/upstream/clash-verge-service-ipc/src/core/command.rs
++++ native/helper/src/core/command.rs
+@@ -11,12 +11,18 @@
+     Status,
+     #[strum(serialize = "/clash/logs")]
+     GetClashLogs,
++    #[strum(serialize = "/clash/logs-since")]
++    GetClashLogsSince,
+ 
+     #[strum(serialize = "/clash/log-snapshot")]
+     GetClashLogSnapshot,
+ 
+     #[strum(serialize = "/clash/start")]
+     StartClash,
++    #[strum(serialize = "/owner/renew")]
++    RenewOwner,
++    #[strum(serialize = "/core/control")]
++    MihomoControl,
+     #[strum(serialize = "/clash/stop")]
+     StopClash,
+     #[strum(serialize = "/clash/stage-runtime")]
+--- vendor/upstream/clash-verge-service-ipc/src/core/config_boundary.rs
++++ native/helper/src/core/config_boundary.rs
+@@ -0,0 +1,90 @@
++//! Validate untrusted YAML again at the privilege boundary, before publishing a runtime.
++use anyhow::{ensure, Result};
++use serde_yaml_ng::{Mapping, Value};
++#[cfg(test)]
++mod marker_tests {
++    #[test]
++    fn portable_marker_is_not_a_valid_privileged_lan_password() {
++        assert!(super::sanitize(&format!(
++            "allow-lan: true\nauthentication: [fixture:{}]",
++            super::credential_marker::MISSING
++        ))
++        .is_err());
++    }
++}
++#[path = "../../../credential_marker.rs"]
++mod credential_marker;
++#[path = "../../../listener_boundary.rs"]
++mod listener_boundary;
++pub fn sanitize(yaml: &str) -> Result<String> {
++    ensure!(yaml.len() <= 16 * 1024 * 1024, "runtime YAML exceeds 16 MiB");
++    ensure!(
++        !yaml.contains(credential_marker::MISSING),
++        "missing credentials must be re-entered before starting a privileged runtime"
++    );
++    let mut config: Mapping =
++        serde_yaml_ng::from_str(yaml).map_err(|_| anyhow::anyhow!("runtime YAML must be a valid mapping"))?;
++    for key in [
++        "external-controller",
++        "external-controller-tls",
++        "external-controller-unix",
++        "external-controller-pipe",
++        "external-controller-cors",
++        "external-ui",
++        "external-ui-url",
++        "external-ui-name",
++        "secret",
++    ] {
++        config.remove(key);
++    }
++    for field in ["proxy-providers", "rule-providers"] {
++        if let Some(map) = config.get(field).and_then(Value::as_mapping) {
++            for (_, item) in map {
++                if let Some(path) = item.get("path").and_then(Value::as_str) {
++                    let path = std::path::Path::new(path);
++                    ensure!(
++                        !path.is_absolute() && path.components().all(|c| matches!(c, std::path::Component::Normal(_))),
++                        "provider path escapes the private runtime"
++                    );
++                }
++            }
++        }
++    }
++    if config.get("allow-lan").and_then(Value::as_bool) == Some(true) {
++        ensure!(
++            config
++                .get("authentication")
++                .and_then(Value::as_sequence)
++                .is_some_and(|s| !s.is_empty()
++                    && s.iter().all(|v| v
++                        .as_str()
++                        .is_some_and(|s| s.split_once(':').is_some_and(|(u, p)| !u.is_empty() && p.len() >= 16)))),
++            "LAN requires explicit access credentials"
++        );
++        config.insert(
++            "skip-auth-prefixes".into(),
++            vec![Value::from("127.0.0.0/8"), Value::from("::1/128")].into(),
++        );
++    }
++    listener_boundary::apply(&mut config)?;
++    Ok(serde_yaml_ng::to_string(&config)?)
++}
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn privileged_control_endpoints_are_removed() {
++        let yaml =
++            sanitize("external-controller: 0.0.0.0:9090\nexternal-ui: /private/var/root\nunknown: {future: true}")
++                .unwrap();
++        let v: Mapping = serde_yaml_ng::from_str(&yaml).unwrap();
++        assert!(!v.contains_key("external-controller"));
++        assert!(!v.contains_key("external-ui"));
++        assert_eq!(v["unknown"]["future"].as_bool(), Some(true));
++    }
++    #[test]
++    fn paths_and_unauthenticated_lan_are_rejected() {
++        assert!(sanitize("proxy-providers: {bad: {type: file, path: /etc/sudoers}}").is_err());
++        assert!(sanitize("allow-lan: true").is_err());
++    }
++}
+--- vendor/upstream/clash-verge-service-ipc/src/core/control_boundary.rs
++++ native/helper/src/core/control_boundary.rs
+@@ -0,0 +1,322 @@
++//! The privileged core socket stays root-private. Only this closed control surface
++//! crosses the authenticated owner boundary; config-file reload and restart do not.
++use crate::MihomoControlRequest;
++use anyhow::{ensure, Result};
++pub fn validate(request: &MihomoControlRequest) -> Result<()> {
++    ensure!(request.path.len() <= 4096, "control path too long");
++    let path = request.path.split('?').next().unwrap_or("");
++    ensure!(
++        path.starts_with('/') && !path.starts_with("//") && !path.contains('\\') && !request.path.contains('#'),
++        "invalid control path"
++    );
++    validate_decoded_path(path)?;
++    let url = url::Url::parse(&format!("http://localhost{}", request.path))?;
++    ensure!(url.path() == path, "control path must not normalize");
++    let named = |prefix: &str| {
++        path.strip_prefix(prefix)
++            .is_some_and(|name| !name.is_empty() && !name.contains('/'))
++    };
++    match request.method.as_str() {
++        "GET" => {
++            ensure!(request.body.is_none(), "read does not accept a body");
++            ensure!(
++                [
++                    "/version",
++                    "/configs",
++                    "/proxies",
++                    "/rules",
++                    "/connections",
++                    "/providers/proxies",
++                    "/providers/rules",
++                    "/dns/query",
++                    "/memory",
++                    "/traffic"
++                ]
++                .contains(&path)
++                    || path.starts_with("/proxies/")
++                    || path.starts_with("/group/")
++                    || path.starts_with("/providers/proxies/")
++                    || path.starts_with("/providers/rules/"),
++                "control read route not allowed"
++            );
++            if ["/traffic", "/memory"].contains(&path) {
++                ensure!(request.path == path, "metric queries do not accept parameters");
++            }
++        }
++        "PUT" if named("/proxies/") => {
++            let body = request
++                .body
++                .as_ref()
++                .and_then(serde_json::Value::as_object)
++                .ok_or_else(|| anyhow::anyhow!("selection requires a name"))?;
++            ensure!(
++                body.len() == 1
++                    && body
++                        .get("name")
++                        .and_then(serde_json::Value::as_str)
++                        .is_some_and(|s| s.len() <= 1024),
++                "only a proxy selection name is accepted"
++            );
++        }
++        "PUT" if named("/providers/proxies/") || named("/providers/rules/") => {
++            ensure!(request.body.is_none(), "provider refresh does not accept a body")
++        }
++        "DELETE" if named("/proxies/") => ensure!(request.body.is_none(), "unfix does not accept a body"),
++        "DELETE" if path == "/connections" || named("/connections/") => {
++            ensure!(request.body.is_none(), "connection close does not accept a body")
++        }
++        "POST" if ["/cache/fakeip/flush", "/cache/dns/flush", "/configs/geo"].contains(&path) => {
++            ensure!(request.body.is_none(), "cache flush does not accept a body")
++        }
++        "PATCH" if path == "/configs" => {
++            let body = request
++                .body
++                .as_ref()
++                .and_then(serde_json::Value::as_object)
++                .ok_or_else(|| anyhow::anyhow!("mode required"))?;
++            ensure!(
++                body.len() == 1
++                    && body
++                        .get("mode")
++                        .and_then(serde_json::Value::as_str)
++                        .is_some_and(|m| ["direct", "global", "rule"].contains(&m)),
++                "only the runtime mode may be patched"
++            );
++        }
++        _ => anyhow::bail!("privileged control mutation is not allowed"),
++    };
++    Ok(())
++}
++fn validate_decoded_path(path: &str) -> Result<()> {
++    let mut current = path.to_owned();
++    for _ in 0..6 {
++        ensure!(
++            !current.starts_with("//")
++                && !current.contains('\\')
++                && !current.chars().any(char::is_control)
++                && !current.split('/').any(|part| part == "." || part == ".."),
++            "encoded path traversal is not allowed"
++        );
++        let bytes = current.as_bytes();
++        let mut output = Vec::new();
++        let mut i = 0;
++        while i < bytes.len() {
++            if bytes[i] == b'%' && i + 2 < bytes.len() {
++                if let (Some(a), Some(b)) = ((bytes[i + 1] as char).to_digit(16), (bytes[i + 2] as char).to_digit(16)) {
++                    output.push((a * 16 + b) as u8);
++                    i += 3;
++                    continue;
++                }
++            }
++            output.push(bytes[i]);
++            i += 1;
++        }
++        let next = String::from_utf8(output)?;
++        if next == current {
++            return Ok(());
++        }
++        current = next;
++    }
++    anyhow::bail!("control path encoding is nested too deeply")
++}
++#[cfg(feature = "standalone")]
++pub async fn execute(identity: &crate::OwnerIdentity, request: &MihomoControlRequest) -> Result<serde_json::Value> {
++    validate(request)?;
++    if ["/traffic", "/memory"].contains(&request.path.as_str()) {
++        return metric_snapshot(std::path::Path::new(&crate::mihomo_ipc_path(identity)), &request.path).await;
++    }
++    let client = kode_bridge::IpcHttpClient::with_config(
++        crate::mihomo_ipc_path(identity),
++        kode_bridge::ClientConfig {
++            default_timeout: std::time::Duration::from_secs(8),
++            max_retries: 1,
++            ..Default::default()
++        },
++    )?;
++    let builder = match request.method.as_str() {
++        "GET" => client.get(&request.path),
++        "PUT" => client.put(&request.path),
++        "PATCH" => client.patch(&request.path),
++        "DELETE" => client.delete(&request.path),
++        "POST" => client.post(&request.path),
++        _ => unreachable!(),
++    };
++    let builder = if let Some(body) = &request.body {
++        builder.json_body(body)
++    } else {
++        builder
++    };
++    let response = builder.send().await?;
++    ensure!(response.is_success(), "Mihomo control returned {}", response.status());
++    let text = response.body()?;
++    ensure!(text.len() <= 8 * 1024 * 1024, "control response exceeds limit");
++    if text.is_empty() {
++        Ok(serde_json::json!({"ok":true}))
++    } else {
++        Ok(serde_json::from_str(&text)?)
++    }
++}
++/// Read a bounded metric sample and drop its stream. Memory's first upstream
++/// frame is deliberately zero, so wait for its second frame. No stream escapes
++/// the authenticated owner boundary or accumulates an unbounded response.
++#[cfg(any(feature = "client", feature = "standalone"))]
++pub async fn metric_snapshot(socket: &std::path::Path, path: &str) -> Result<serde_json::Value> {
++    ensure!(["/traffic", "/memory"].contains(&path), "unknown metric");
++    tokio::time::timeout(std::time::Duration::from_secs(5), async {
++        let client = kode_bridge::IpcStreamClient::with_config(
++            socket,
++            kode_bridge::StreamClientConfig {
++                default_timeout: std::time::Duration::from_secs(4),
++                max_retries: 1,
++                ..Default::default()
++            },
++        )?;
++        let response = client.get(path).send().await?;
++        ensure!(response.is_success(), "metric request failed");
++        let mut snapshot = None;
++        let mut frames = 0;
++        let wanted = if path == "/memory" { 2 } else { 1 };
++        response
++            .into_inner()
++            .process_lines_with_timeout(std::time::Duration::from_secs(3), |line| {
++                if line.len() > 8192 {
++                    return Err("metric frame exceeds limit".into());
++                }
++                // Go's flushed HTTP response may include chunk framing lines. Only its
++                // bounded JSON objects are data; TCP fragmentation is handled by LinesCodec.
++                if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
++                    if value.is_object() {
++                        let keys = if path == "/memory" {
++                            vec!["inuse", "oslimit"]
++                        } else {
++                            vec!["up", "down", "upTotal", "downTotal"]
++                        };
++                        let mut bounded = serde_json::Map::new();
++                        for key in keys {
++                            if let Some(number) = value.get(key).and_then(serde_json::Value::as_u64) {
++                                bounded.insert(key.into(), number.into());
++                            }
++                        }
++                        if bounded.len() != if path == "/memory" { 2 } else { 4 } {
++                            return Err("invalid metric frame".into());
++                        }
++                        frames += 1;
++                        snapshot = Some(bounded.into());
++                        if frames >= wanted {
++                            return Ok(false);
++                        }
++                    }
++                }
++                Ok(true)
++            })
++            .await?;
++        ensure!(
++            frames >= wanted,
++            "metric stream ended or timed out before a usable frame"
++        );
++        snapshot.ok_or_else(|| anyhow::anyhow!("metric sample unavailable"))
++    })
++    .await
++    .map_err(|_| anyhow::anyhow!("metric sample timed out"))?
++}
++#[cfg(all(test, any(feature = "client", feature = "standalone"), unix))]
++mod metric_tests {
++    use super::*;
++    use tokio::io::{AsyncReadExt, AsyncWriteExt};
++    #[tokio::test]
++    async fn bounded_metrics_handle_chunk_framing_skip_initial_memory_zero_and_close_live_stream() {
++        for (path, frames, expected_key, expected) in [
++            (
++                "/traffic",
++                vec![r#"{"up":12,"down":34,"upTotal":120,"downTotal":340}"#],
++                "up",
++                12,
++            ),
++            (
++                "/memory",
++                vec![r#"{"inuse":0,"oslimit":0}"#, r#"{"inuse":6543,"oslimit":0}"#],
++                "inuse",
++                6543,
++            ),
++        ] {
++            let temp = tempfile::tempdir().unwrap();
++            let socket = temp.path().join("metric.sock");
++            let listener = tokio::net::UnixListener::bind(&socket).unwrap();
++            let server = tokio::spawn(async move {
++                let (mut stream, _) = listener.accept().await.unwrap();
++                let mut request = vec![0; 4096];
++                let count = stream.read(&mut request).await.unwrap();
++                assert!(std::str::from_utf8(&request[..count]).unwrap().contains(path));
++                stream
++                    .write_all(
++                        b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n",
++                    )
++                    .await
++                    .unwrap();
++                for frame in frames {
++                    let frame = format!("{frame}\n");
++                    stream
++                        .write_all(format!("{:x}\r\n{}\r\n", frame.len(), frame).as_bytes())
++                        .await
++                        .unwrap();
++                }
++                // Deliberately leave the response open. The sampler must cancel its socket.
++                let count = tokio::time::timeout(std::time::Duration::from_secs(3), stream.read(&mut request))
++                    .await
++                    .unwrap()
++                    .unwrap();
++                assert_eq!(count, 0);
++            });
++            let sample = metric_snapshot(&socket, path).await.unwrap();
++            assert_eq!(sample[expected_key], expected);
++            server.await.unwrap();
++        }
++    }
++}
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use serde_json::json;
++    fn request(method: &str, path: &str, body: Option<serde_json::Value>) -> MihomoControlRequest {
++        MihomoControlRequest {
++            method: method.into(),
++            path: path.into(),
++            body,
++        }
++    }
++    #[test]
++    fn root_file_reload_restart_and_tun_patch_are_rejected() {
++        for req in [
++            request("PUT", "/configs", Some(json!({"path":"/etc/sudoers"}))),
++            request("POST", "/restart", None),
++            request("PATCH", "/configs", Some(json!({"tun":{"enable":true}}))),
++            request("GET", "/proxies/%2e%2e/restart", None),
++            request("GET", "//example.com/configs", None),
++            request("PUT", "/proxies/%252e%252e%252fconfigs", Some(json!({"name":"x"}))),
++        ] {
++            assert!(validate(&req).is_err());
++        }
++    }
++    #[test]
++    fn encoded_slash_in_a_proxy_name_is_not_path_traversal() {
++        assert!(validate(&request("PUT", "/proxies/Auto%2FSelect", Some(json!({"name":"node"})))).is_ok());
++        assert!(validate(&request(
++            "GET",
++            "/proxies/Region%2FNode/delay?url=https%3A%2F%2Fexample.com&timeout=5000",
++            None
++        ))
++        .is_ok());
++    }
++    #[test]
++    fn typed_selection_and_read_work() {
++        assert!(validate(&request("PUT", "/proxies/group", Some(json!({"name":"node"})))).is_ok());
++        assert!(validate(&request("GET", "/dns/query?name=example.com&type=A", None)).is_ok());
++        assert!(validate(&request("PATCH", "/configs", Some(json!({"mode":"rule"})))).is_ok());
++        assert!(validate(&request(
++            "PUT",
++            "/proxies/group",
++            Some(json!({"name":"node","path":"/root"}))
++        ))
++        .is_err());
++    }
++}
+--- vendor/upstream/clash-verge-service-ipc/src/core/desired.rs
++++ native/helper/src/core/desired.rs
+@@ -140,7 +140,9 @@
+ }
+ 
+ pub async fn restore_desired_state() -> Result<()> {
+-    backup_legacy_desired_states().await;
++    // SI Assist never renames the original application's legacy state.
++    #[cfg(target_os="macos")]
++    super::server::recover_owner_on_startup().await?;
+ 
+     let Some(active_owner) = load_active_owner().await? else {
+         info!("No active owner to restore");
+@@ -394,7 +396,8 @@
+         .unwrap_or_default()
+ }
+ 
+-#[cfg(test)]
++// These fixtures mutate service state and require the isolated test paths.
++#[cfg(all(test, feature = "test"))]
+ mod owner_tests {
+     use super::{
+         backup_legacy_state_file, clear_active_owner, commit_active_owner_session, load_active_owner,
+--- vendor/upstream/clash-verge-service-ipc/src/core/lease.rs
++++ native/helper/src/core/lease.rs
+@@ -0,0 +1,147 @@
++//! Owner generation leases survive daemon restarts without counting sleep as a lost GUI.
++use anyhow::{Context, Result, ensure};
++use serde::{Deserialize, Serialize};
++use std::{io::{Read, Write}, path::Path, time::{SystemTime, UNIX_EPOCH}};
++use super::{desired::ActiveOwnerState, paths::service_paths};
++
++const LEASE_NS: u64 = 30_000_000_000;
++const WAKE_GRACE_NS: u64 = 10_000_000_000;
++const SLEEP_DETECTION_NS: u64 = 2_000_000_000;
++
++#[derive(Debug, Clone, Serialize, Deserialize)]
++pub(crate) struct Clock { pub awake: u64, pub continuous: u64, pub boot: String }
++
++#[derive(Debug, Clone, Serialize, Deserialize)]
++pub(crate) struct Lease {
++    owner_key: String,
++    generation: u64,
++    deadline: u64,
++    observed: Clock,
++}
++
++impl Lease {
++    fn new(owner: &ActiveOwnerState, now: Clock) -> Self {
++        Self { owner_key: owner.owner_key.clone(), generation: owner.generation,
++            deadline: now.awake.saturating_add(LEASE_NS), observed: now }
++    }
++    fn matches(&self, owner: &ActiveOwnerState) -> bool {
++        self.owner_key == owner.owner_key && self.generation == owner.generation
++    }
++    /// Returns whether wake grace was newly granted, so it can be persisted before accepting IPC.
++    fn observe(&mut self, now: &Clock) -> bool {
++        if now.boot != self.observed.boot || now.awake < self.observed.awake { return false; }
++        let slept = now.continuous.saturating_sub(self.observed.continuous)
++            .saturating_sub(now.awake.saturating_sub(self.observed.awake)) > SLEEP_DETECTION_NS;
++        let grace = slept && now.awake < self.deadline;
++        if grace { self.deadline = now.awake.saturating_add(WAKE_GRACE_NS); }
++        self.observed = now.clone();
++        grace
++    }
++    fn live(&self, now: &Clock) -> bool {
++        now.boot == self.observed.boot && now.awake >= self.observed.awake && now.awake < self.deadline
++    }
++}
++
++#[cfg(target_os="macos")]
++pub(crate) fn clock() -> Result<Clock> {
++    #[repr(C)] struct Timebase { numer:u32, denom:u32 }
++    unsafe extern "C" {
++        fn mach_absolute_time() -> u64;
++        fn mach_continuous_time() -> u64;
++        fn mach_timebase_info(info:*mut Timebase) -> i32;
++    }
++    static BOOT: once_cell::sync::OnceCell<String> = once_cell::sync::OnceCell::new();
++    let boot = BOOT.get_or_try_init(|| -> Result<String> {
++        let output=std::process::Command::new("/usr/sbin/sysctl").args(["-n","kern.bootsessionuuid"]).output()?;
++        ensure!(output.status.success(), "cannot read boot identity");
++        let value=String::from_utf8(output.stdout)?.trim().to_owned();
++        ensure!(!value.is_empty() && value.len()<128,"invalid boot identity"); Ok(value)
++    })?;
++    let mut base=Timebase{numer:0,denom:0};
++    ensure!(unsafe { mach_timebase_info(&mut base) }==0 && base.denom>0,"clock timebase unavailable");
++    let ns=|t:u64| ((t as u128 * base.numer as u128)/base.denom as u128).min(u64::MAX as u128) as u64;
++    Ok(Clock { awake:ns(unsafe {mach_absolute_time()}), continuous:ns(unsafe {mach_continuous_time()}), boot:boot.clone() })
++}
++
++#[cfg(not(target_os="macos"))]
++pub(crate) fn clock() -> Result<Clock> {
++    anyhow::bail!("SI owner leases currently require macOS clocks")
++}
++
++fn lease_path() -> Result<std::path::PathBuf> { Ok(service_paths()?.persistent_state_dir().join("owner-lease.json")) }
++pub(crate) fn write_private<T:Serialize>(path:&Path, value:&T) -> Result<()> {
++    use std::os::unix::fs::OpenOptionsExt;
++    let parent=path.parent().context("journal has no parent")?;
++    super::platform_security::ensure_private_service_directory(parent)?;
++    super::platform_security::secure_private_service_file_if_exists(path)?;
++    let stamp=SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
++    let tmp=parent.join(format!(".journal-{}-{stamp}",std::process::id()));
++    let result=(|| -> Result<()> {
++        let mut file=std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600)
++            .custom_flags(platform_lib::O_NOFOLLOW).open(&tmp)?;
++        file.write_all(&serde_json::to_vec(value)?)?;file.sync_all()?;drop(file);
++        std::fs::rename(&tmp,path)?; std::fs::File::open(parent)?.sync_all()?; Ok(())
++    })();
++    if result.is_err() { let _=std::fs::remove_file(&tmp); }
++    result
++}
++
++pub(crate) fn read_private<T:serde::de::DeserializeOwned>(path:&Path) -> Result<Option<T>> {
++    use std::os::unix::fs::OpenOptionsExt;
++    super::platform_security::secure_private_service_file_if_exists(path)?;
++    let mut file=match std::fs::OpenOptions::new().read(true).custom_flags(platform_lib::O_NOFOLLOW).open(path) {
++        Err(e) if e.kind()==std::io::ErrorKind::NotFound => return Ok(None), result=>result?,
++    };
++    ensure!(file.metadata()?.len()<=8*1024*1024,"journal too large");
++    let mut bytes=Vec::new();file.read_to_end(&mut bytes)?;Ok(Some(serde_json::from_slice(&bytes)?))
++}
++
++pub(crate) fn issue(owner:&ActiveOwnerState) -> Result<()> { write_private(&lease_path()?,&Lease::new(owner,clock()?)) }
++pub(crate) fn renew(owner:&ActiveOwnerState) -> Result<()> {
++    let now=clock()?;
++    let mut lease:Lease=read_private(&lease_path()?)?.context("owner has no lease")?;
++    ensure!(lease.matches(owner),"stale owner generation");
++    lease.observe(&now);
++    ensure!(lease.live(&now),"owner lease expired");
++    write_private(&lease_path()?,&Lease::new(owner,now))
++}
++pub(crate) fn is_live(owner:&ActiveOwnerState) -> Result<bool> {
++    let Some(mut lease):Option<Lease>=read_private(&lease_path()?)? else {return Ok(false)};
++    if !lease.matches(owner) {return Ok(false)}
++    let now=clock()?;
++    if lease.observe(&now) {write_private(&lease_path()?,&lease)?;}
++    Ok(lease.live(&now))
++}
++pub(crate) fn clear() -> Result<()> {
++    match std::fs::remove_file(lease_path()?) {
++        Err(e) if e.kind()==std::io::ErrorKind::NotFound=>Ok(()),result=>Ok(result?),
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    fn now(awake:u64,continuous:u64)->Clock {Clock {awake:awake*1_000_000_000,continuous:continuous*1_000_000_000,boot:"A".into()}}
++    fn owner()->ActiveOwnerState {ActiveOwnerState {owner_key:"501".into(),identity:crate::OwnerIdentity::Unix{uid:501,gid:20},app_data_root:"/fixture".into(),generation:7,session_token_hash:String::new()}}
++    #[test]
++    fn expiry_survives_serialization_and_rejects_stale_generation() {
++        let lease=Lease::new(&owner(),now(0,0));
++        let restored:Lease=serde_json::from_slice(&serde_json::to_vec(&lease).unwrap()).unwrap();
++        assert!(restored.live(&now(29,29)));assert!(!restored.live(&now(30,30)));
++        let mut stale=owner();stale.generation=6;assert!(!restored.matches(&stale));
++        let mut reboot=now(1,1);reboot.boot="B".into();assert!(!restored.live(&reboot));
++    }
++    #[test]
++    fn wake_grace_is_not_regranted_by_restarting_daemon() {
++        let mut lease=Lease::new(&owner(),now(0,0));
++        assert!(lease.observe(&now(4,604)));assert!(lease.live(&now(13,613)));
++        let mut restored:Lease=serde_json::from_slice(&serde_json::to_vec(&lease).unwrap()).unwrap();
++        assert!(!restored.observe(&now(14,614)));assert!(!restored.live(&now(14,614)));
++    }
++    #[test]
++    fn expired_owner_is_not_resurrected_by_sleep() {
++        let mut lease=Lease::new(&owner(),now(0,0));
++        lease.observe(&now(31,31));
++        assert!(!lease.observe(&now(32,632)));assert!(!lease.live(&now(32,632)));
++    }
++}
+--- vendor/upstream/clash-verge-service-ipc/src/core/logger.rs
++++ native/helper/src/core/logger.rs
+@@ -1,3 +1,7 @@
++#[cfg(unix)]
++use platform_lib as libc;
++#[path = "../../../log_retention.rs"]
++mod log_retention;
+ use std::{collections::VecDeque, time::Duration};
+ 
+ use anyhow::Result;
+@@ -54,6 +58,7 @@
+     ensure_persistent_state_layout()?;
+     let directory = service_paths()?.logs_dir();
+     platform_security::ensure_private_service_directory(&directory)?;
++    log_retention::cleanup(&directory, crate::SERVICE_SLUG, &format!("{}_latest.log", crate::SERVICE_SLUG), 7, true)?;
+     Ok(FileLogWriter::builder(
+         FileSpec::default()
+             .directory(directory)
+@@ -76,6 +81,7 @@
+ }
+ 
+ fn service_writer_builder(config: &WriterConfig) -> FileLogWriterBuilder {
++    let _ = log_retention::cleanup(std::path::Path::new(&config.directory), "service", "service_latest.log", 7, GLOBAL_WRITER.read().is_none());
+     FileLogWriter::builder(
+         FileSpec::default()
+             .directory(config.directory.clone())
+@@ -133,32 +139,53 @@
+ const LOGS_QUEUE_LEN: usize = 100;
+ 
+ pub struct LogRing {
+-    inner: Mutex<VecDeque<String>>,
++    inner: Mutex<(u64, VecDeque<(u64,String)>)>,
++    stream: String,
+ }
+ 
+ impl LogRing {
+     fn new() -> Self {
+         Self {
+-            inner: Mutex::new(VecDeque::with_capacity(LOGS_QUEUE_LEN)),
++            inner: Mutex::new((0,VecDeque::with_capacity(LOGS_QUEUE_LEN))),
++            stream:uuid::Uuid::new_v4().to_string(),
+         }
+     }
+ 
+     pub fn append_log(&self, log: String) {
+         let mut guard = self.inner.lock();
+-        if guard.len() >= LOGS_QUEUE_LEN {
+-            guard.pop_front();
++        if guard.1.len() >= LOGS_QUEUE_LEN {guard.1.pop_front();}
++        guard.0=guard.0.saturating_add(1);let sequence=guard.0;
++        let mut end=log.len().min(16*1024);while !log.is_char_boundary(end) {end-=1;}
++        guard.1.push_back((sequence,log[..end].to_owned()));
++    }
++    pub fn get_logs(&self) -> Vec<String> {self.inner.lock().1.iter().map(|(_,line)|line.clone()).collect()}
++    pub fn since(&self,cursor:&crate::log_cursor::LogCursor) -> crate::log_cursor::LogBatch {
++        let guard=self.inner.lock();let same=cursor.stream.as_ref()==Some(&self.stream);
++        let after=if same {cursor.after} else {0};let mut bytes=0;let mut lines=Vec::new();let mut next=after;
++        for (sequence,line) in &guard.1 {
++            if *sequence<=after {continue;}
++            if bytes+line.len()>256*1024 {break;}
++            bytes+=line.len();lines.push(line.clone());next=*sequence;
+         }
+-        guard.push_back(log);
++        if lines.is_empty() {next=guard.0;}
++        crate::log_cursor::LogBatch{stream:self.stream.clone(),next,dropped:same && guard.1.front().is_some_and(|(first,_)|*first>after.saturating_add(1)),lines}
+     }
++    pub fn clear_logs(&self) {self.inner.lock().1.clear();}
+ 
+-    pub fn get_logs(&self) -> Vec<String> {
+-        let guard = self.inner.lock();
+-        guard.iter().cloned().collect()
+-    }
+-
+-    pub fn clear_logs(&self) {
+-        self.inner.lock().clear();
+-    }
+ }
+ 
+ pub static LOG_RING: Lazy<LogRing> = Lazy::new(LogRing::new);
++
++#[cfg(test)]
++mod cursor_tests {
++    use super::*;
++    #[test] fn ordered_cursor_retains_identical_records_and_reports_bounded_loss() {
++        let ring=LogRing::new();ring.append_log("same".into());
++        let first=ring.since(&Default::default());ring.append_log("same".into());
++        let next=ring.since(&crate::log_cursor::LogCursor{stream:Some(first.stream.clone()),after:first.next});
++        assert_eq!(next.lines,vec!["same"]);assert!(next.next>first.next);assert!(!next.dropped);
++        for _ in 0..150 {ring.append_log("same".into());}
++        assert!(ring.since(&crate::log_cursor::LogCursor{stream:Some(first.stream),after:first.next}).dropped);
++        ring.clear_logs();ring.append_log("new run".into());assert!(ring.since(&Default::default()).lines.contains(&"new run".into()));
++    }
++}
+--- vendor/upstream/clash-verge-service-ipc/src/core/maintenance.rs
++++ native/helper/src/core/maintenance.rs
+@@ -107,9 +107,15 @@
+             .create(true)
+             .truncate(false)
+             .open(paths.owner_lock_path())?;
+-        if unsafe { platform_lib::flock(file.as_raw_fd(), platform_lib::LOCK_EX | platform_lib::LOCK_NB) } != 0 {
+-            return Err(std::io::Error::last_os_error())
+-                .context("service owner lock is held; stop the service before stale-owner maintenance");
++        // launchctl bootout can return before launchd's 5-second termination grace expires.
++        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(7);
++        loop {
++            if unsafe { platform_lib::flock(file.as_raw_fd(), platform_lib::LOCK_EX | platform_lib::LOCK_NB) } == 0 { break; }
++            let error = std::io::Error::last_os_error();
++            if error.kind() != std::io::ErrorKind::WouldBlock || std::time::Instant::now() >= deadline {
++                return Err(error).context("service owner lock is held; stop the service before stale-owner maintenance");
++            }
++            std::thread::sleep(std::time::Duration::from_millis(100));
+         }
+         Ok(StoppedServiceGuard { _file: file })
+     }
+--- vendor/upstream/clash-verge-service-ipc/src/core/manager.rs
++++ native/helper/src/core/manager.rs
+@@ -1,3 +1,8 @@
++#[path="../../../log_redaction.rs"]
++mod log_redaction;
++#[cfg(all(target_os="macos",not(feature="test")))]
++#[path="../../../runtime_sandbox.rs"]
++mod runtime_sandbox;
+ use crate::core::ClashConfig;
+ use crate::core::logger::{LOG_RING, set_or_update_writer, write_core_line};
+ use crate::core::process::process_identity;
+@@ -6,7 +11,7 @@
+ use crate::core::state::set_core_lifecycle_state;
+ use crate::core::structure::ServiceLifecycleState;
+ use crate::{OwnerIdentity, WriterConfig};
+-use anyhow::{Context as _, Result, anyhow};
++use anyhow::{Context as _, Result, anyhow, ensure};
+ use once_cell::sync::Lazy;
+ use std::process::Stdio;
+ #[cfg(feature = "test")]
+@@ -779,7 +784,20 @@
+     #[cfg(unix)]
+     let child = unsafe {
+         let _ = owner;
+-        Command::new(bin_path)
++        #[cfg(all(target_os="macos",not(feature="test")))]
++        let mut command={
++            let runtime=args.windows(2).find(|pair|pair[0]=="-d").map(|pair|std::path::Path::new(&pair[1])).context("runtime argument missing")?;
++            let socket=args.windows(2).find(|pair|pair[0]=="-ext-ctl-unix").map(|pair|std::path::Path::new(&pair[1])).context("control argument missing")?;
++            let config=args.windows(2).find(|pair|pair[0]=="-f").map(|pair|std::path::Path::new(&pair[1])).context("configuration argument missing")?;
++            ensure!(std::fs::metadata(config)?.len()<=16*1024*1024,"persisted configuration exceeds limit");
++            let yaml=std::fs::read_to_string(config)?;
++            ensure!(crate::core::config_boundary::sanitize(&yaml)?==yaml,"persisted configuration must be reapplied through the current privilege boundary");
++            let profile=runtime_sandbox::profile(bin_path,runtime,socket.parent().context("socket parent missing")?)?;
++            let mut command=Command::new("/usr/bin/sandbox-exec");command.args(["-p",&profile]).arg(bin_path);command
++        };
++        #[cfg(not(all(target_os="macos",not(feature="test"))))]
++        let mut command=Command::new(bin_path);
++        command
+             .args(args)
+             .stdout(Stdio::piped())
+             .stderr(Stdio::piped())
+@@ -802,19 +820,38 @@
+         return Err(anyhow!("Failed to capture child output"));
+     };
+ 
+-    child_guard.readers.push(spawn_line_reader(stdout, log::Level::Info));
+-    child_guard.readers.push(spawn_line_reader(stderr, log::Level::Error));
++    #[cfg(not(feature="test"))]
++    let redactor={let config=args.windows(2).find(|pair|pair[0]=="-f").context("configuration argument missing for log protection")?;std::sync::Arc::new(log_redaction::Redactor::from_yaml(&std::fs::read_to_string(&config[1])?).map_err(anyhow::Error::msg)?)};
++    #[cfg(feature="test")]
++    let redactor=std::sync::Arc::new(log_redaction::Redactor::default());
++    child_guard.readers.push(spawn_line_reader(stdout, log::Level::Info,redactor.clone()));
++    child_guard.readers.push(spawn_line_reader(stderr, log::Level::Error,redactor));
+ 
+     Ok(child_guard)
+ }
+ 
+-fn spawn_line_reader<R>(reader: R, level: log::Level) -> JoinHandle<()>
++async fn bounded_core_line<R: tokio::io::AsyncBufRead + Unpin>(reader: &mut R) -> std::io::Result<Option<String>> {
++    use tokio::io::AsyncBufReadExt;
++    let mut bytes=Vec::new();let mut oversized=false;let mut consumed=false;
++    loop {
++        let chunk=reader.fill_buf().await?;
++        if chunk.is_empty() {if !consumed {return Ok(None);} break;}
++        let end=chunk.iter().position(|b| *b==b'\n').map(|i|i+1);
++        let count=end.unwrap_or(chunk.len());consumed=true;
++        if !oversized {if bytes.len()+count<=16*1024 {bytes.extend_from_slice(&chunk[..count]);} else {oversized=true;bytes.clear();}}
++        reader.consume(count);if end.is_some() {break;}
++    }
++    Ok(Some(if oversized {"SI Assist: oversized core log record omitted".into()} else {String::from_utf8_lossy(&bytes).trim_end_matches(['\r','\n']).to_owned()}))
++}
++
++fn spawn_line_reader<R>(reader: R, level: log::Level, redactor:std::sync::Arc<log_redaction::Redactor>) -> JoinHandle<()>
+ where
+     R: tokio::io::AsyncRead + Unpin + Send + 'static,
+ {
+     tokio::spawn(async move {
+-        let mut lines = BufReader::new(reader).lines();
+-        while let Ok(Some(line)) = lines.next_line().await {
++        let mut lines = BufReader::new(reader);
++        while let Ok(Some(line)) = bounded_core_line(&mut lines).await {
++            let line=redactor.redact(&line);
+             write_core_line(level, &line);
+             LOG_RING.append_log(line);
+         }
+@@ -949,6 +986,8 @@
+         }
+         let path = std::ffi::CString::new(target.as_os_str().as_bytes())
+             .map_err(|_| anyhow::anyhow!("core IPC socket path contains NUL"))?;
++        #[cfg(all(target_os="macos",not(feature="test")))]
++        let (uid,gid)=if unsafe{platform_lib::geteuid()}==0 {(0,0)}else{(uid,gid)};
+         let chown_ok =
+             unsafe { platform_lib::geteuid() } != 0 || unsafe { platform_lib::lchown(path.as_ptr(), uid, gid) } == 0;
+         let chmod_ok = unsafe {
+@@ -963,6 +1002,9 @@
+         if !chown_ok || !chmod_ok {
+             return Err(os_error.unwrap_or_else(std::io::Error::last_os_error).into());
+         }
++        #[cfg(all(target_os="macos",not(feature="test")))]
++        if unsafe{platform_lib::geteuid()}!=0 {grant_core_ipc_directory_to_owner(&target,uid,gid)?;}
++        #[cfg(not(all(target_os="macos",not(feature="test"))))]
+         grant_core_ipc_directory_to_owner(&target, uid, gid)?;
+         info!("Secured core IPC socket {:?} for uid {}", target, uid);
+         Ok(())
+@@ -1135,3 +1177,15 @@
+         assert!(!sddl.contains(";;;AU)"));
+     }
+ }
++
++#[cfg(test)]
++mod bounded_log_tests {
++    #[tokio::test] async fn oversized_records_are_drained_without_leaking_partial_secrets() {
++        let input=format!("{}\nsame\nsame\n","secret".repeat(20000));
++        let mut reader=tokio::io::BufReader::new(input.as_bytes());
++        assert_eq!(super::bounded_core_line(&mut reader).await.unwrap().as_deref(),Some("SI Assist: oversized core log record omitted"));
++        assert_eq!(super::bounded_core_line(&mut reader).await.unwrap().as_deref(),Some("same"));
++        assert_eq!(super::bounded_core_line(&mut reader).await.unwrap().as_deref(),Some("same"));
++        assert!(super::bounded_core_line(&mut reader).await.unwrap().is_none());
++    }
++}
+--- vendor/upstream/clash-verge-service-ipc/src/core/mod.rs
++++ native/helper/src/core/mod.rs
+@@ -1,4 +1,8 @@
+ pub mod command;
++pub mod control_boundary;
++#[cfg(feature="standalone")]
++mod config_boundary;
++pub use structure::MihomoControlRequest;
+ pub use command::IpcCommand;
+ 
+ pub mod structure;
+@@ -49,7 +53,7 @@
+ #[cfg(feature = "standalone")]
+ mod runtime_generation;
+ #[cfg(feature = "standalone")]
+-mod server;
++pub(crate) mod server;
+ #[cfg(feature = "standalone")]
+ mod state;
+ #[cfg(feature = "standalone")]
+@@ -99,3 +103,11 @@
+ pub use test_credentials::test_owner_credentials_for_uid;
+ #[cfg(feature = "standalone")]
+ pub use trusted_core_location::require_trusted_core_source;
++
++#[cfg(all(feature = "standalone", target_os = "macos"))]
++pub(crate) mod lease;
++#[cfg(all(feature = "standalone", target_os = "macos"))]
++pub(crate) mod proxy_journal;
++
++#[cfg(all(feature="standalone",target_os="macos"))]
++pub(crate) mod trusted_client;
+--- vendor/upstream/clash-verge-service-ipc/src/core/paths.rs
++++ native/helper/src/core/paths.rs
+@@ -266,11 +266,11 @@
+     #[cfg(unix)]
+     #[test]
+     fn unix_mihomo_ipc_path_is_owner_scoped_and_below_sun_path_limit() {
+-        let path = unix_mihomo_ipc_path(Path::new("/var/run/clash-verge-service"), 501);
++        let path = unix_mihomo_ipc_path(Path::new("/var/run/si-assist-service"), 501);
+ 
+         assert_eq!(
+             path,
+-            Path::new("/var/run/clash-verge-service/users/501/verge-mihomo.sock")
++            Path::new("/var/run/si-assist-service/users/501/verge-mihomo.sock")
+         );
+         assert!(path.as_os_str().as_encoded_bytes().len() < 104);
+     }
+--- vendor/upstream/clash-verge-service-ipc/src/core/proxy.rs
++++ native/helper/src/core/proxy.rs
+@@ -1,5 +1,4 @@
+ use std::future::Future;
+-use std::net::IpAddr;
+ use std::time::Duration;
+ 
+ use anyhow::{Context, ensure};
+@@ -8,7 +7,7 @@
+ 
+ use crate::{MacosProxyConfig, ProxyApplyOutcome};
+ 
+-const MAX_HOST_LEN: usize = 64;
++const MAX_HOST_LEN: usize = 253;
+ const MAX_BYPASS_LEN: usize = 8192;
+ const MAX_PAC_URL_LEN: usize = 256;
+ const PAC_PATH: &str = "/commands/pac";
+@@ -36,8 +35,7 @@
+             ensure!(!bypass.contains('\0'), "proxy bypass contains NUL");
+             ensure!(*port != 0, "proxy port must be nonzero");
+ 
+-            let address: IpAddr = host.parse().context("proxy host must be an IP address")?;
+-            ensure!(address.is_loopback(), "proxy host must be loopback");
++            crate::proxy_destination::validate_host(host)?;
+             Ok(())
+         }
+         MacosProxyConfig::Pac { url } => validate_pac_url(url),
+@@ -69,12 +67,8 @@
+         parsed.host_str().is_some_and(|host| host.len() <= MAX_HOST_LEN),
+         "PAC URL host exceeds {MAX_HOST_LEN} bytes"
+     );
+-    let is_loopback = match host {
+-        Host::Ipv4(address) => address.is_loopback(),
+-        Host::Ipv6(address) => address.is_loopback(),
+-        Host::Domain(_) => false,
+-    };
+-    ensure!(is_loopback, "PAC URL host must be a loopback IP address");
++    let destination = match host {Host::Ipv4(ip)=>ip.to_string(),Host::Ipv6(ip)=>ip.to_string(),Host::Domain(host)=>host.to_owned()};
++    crate::proxy_destination::validate_host(&destination)?;
+     Ok(())
+ }
+ 
+@@ -95,6 +89,7 @@
+ 
+ #[cfg(target_os = "macos")]
+ fn apply_real(config: &MacosProxyConfig) -> anyhow::Result<()> {
++    if matches!(config,MacosProxyConfig::Disabled){return super::proxy_journal::restore()}
+     let (system, auto) = match config {
+         MacosProxyConfig::Disabled => (sysproxy::Sysproxy::default(), sysproxy::Autoproxy::default()),
+         MacosProxyConfig::Global { host, port, bypass } => (
+@@ -114,7 +109,8 @@
+             },
+         ),
+     };
+-    sysproxy::apply_privileged_native(&system, &auto).map_err(Into::into)
++    sysproxy::apply_owned_native(&system, &auto, super::proxy_journal::prepare)?;
++    super::proxy_journal::commit()
+ }
+ 
+ #[cfg(any(target_os = "macos", test))]
+@@ -220,10 +216,19 @@
+ 
+ #[cfg(target_os = "macos")]
+ pub async fn apply_proxy_or_direct(config: Option<&MacosProxyConfig>) -> anyhow::Result<ProxyApplyOutcome> {
+-    let config = config.cloned();
+-    tokio::task::spawn_blocking(move || apply_proxy_or_direct_with(config.as_ref(), apply_real))
+-        .await
+-        .context("proxy apply task failed")?
++    let Some(config)=config.cloned() else {return Ok(ProxyApplyOutcome::NotRequested)};
++    tokio::task::spawn_blocking(move || {
++        validate_proxy_config(&config)?;
++        match apply_real(&config) {
++            Ok(())=>Ok(ProxyApplyOutcome::Applied),
++            Err(error)=>{super::proxy_journal::restore()?;Err(error)}
++        }
++    }).await.context("owned proxy apply task failed")?
++}
++
++#[cfg(target_os = "macos")]
++pub async fn restore_owned_proxy() -> anyhow::Result<()> {
++    tokio::task::spawn_blocking(super::proxy_journal::restore).await.context("owned proxy recovery task failed")?
+ }
+ 
+ #[cfg(not(target_os = "macos"))]
+@@ -267,7 +272,7 @@
+                 port: 7897,
+                 bypass: String::new(),
+             })
+-            .is_err()
++            .is_ok()
+         );
+         assert!(
+             validate_proxy_config(&MacosProxyConfig::Pac {
+@@ -277,6 +282,12 @@
+         );
+     }
+ 
++    #[test]
++    fn revision9_explicit_proxy_hosts_do_not_change_the_private_controller_contract() {
++        for url in ["http://203.0.113.9:33221/commands/pac", "http://localhost:33221/commands/pac", "http://[2001:db8::1]:33221/commands/pac"] {
++            assert!(validate_proxy_config(&MacosProxyConfig::Pac{url:url.into()}).is_ok());
++        }
++    }
+     #[test]
+     fn proxy_contract_rejects_unbounded_or_unsafe_fields() {
+         let invalid = [
+@@ -291,7 +302,7 @@
+                 bypass: String::new(),
+             },
+             MacosProxyConfig::Global {
+-                host: "1".repeat(65),
++                host: "1".repeat(254),
+                 port: 7897,
+                 bypass: String::new(),
+             },
+@@ -331,15 +342,6 @@
+             },
+             MacosProxyConfig::Pac {
+                 url: "http://127.0.0.1:33221/other".to_owned(),
+-            },
+-            MacosProxyConfig::Pac {
+-                url: "http://203.0.113.9:33221/commands/pac".to_owned(),
+-            },
+-            MacosProxyConfig::Pac {
+-                url: "http://localhost:33221/commands/pac".to_owned(),
+-            },
+-            MacosProxyConfig::Pac {
+-                url: "http://[2001:db8::1]:33221/commands/pac".to_owned(),
+             },
+             MacosProxyConfig::Pac {
+                 url: "http://[::1]:33221/commands/pac\0".to_owned(),
+--- vendor/upstream/clash-verge-service-ipc/src/core/proxy_journal.rs
++++ native/helper/src/core/proxy_journal.rs
+@@ -0,0 +1,87 @@
++//! Recovery uses a service-scoped compare-and-swap under the native preferences lock.
++use anyhow::{Context, Result, ensure};
++use serde::{Deserialize, Serialize};
++use super::{lease::{read_private, write_private}, paths::service_paths};
++
++#[derive(Default, Serialize, Deserialize)]
++struct Journal { changes: Vec<sysproxy::NativeProxyChange> }
++fn path()->Result<std::path::PathBuf>{Ok(service_paths()?.persistent_state_dir().join("network-ownership.json"))}
++
++pub(crate) fn prepare(change:&sysproxy::NativeProxyChange)->std::io::Result<()> {
++    let result=(||->Result<()> {
++        let path=path()?;
++        let mut journal:Journal=read_private(&path)?.unwrap_or_default();
++        ensure!(journal.changes.len()<1024,"network journal needs recovery before another write");
++        if let Some(old)=journal.changes.iter().rev().find(|old|old.service_id==change.service_id) {
++            ensure!(sysproxy::native_snapshots_equal(&old.after,&change.before)?,"external proxy modification; explicit takeover required");
++        }
++        journal.changes.push(change.clone());
++        write_private(&path,&journal)
++    })();
++    result.map_err(std::io::Error::other)
++}
++
++pub(crate) fn restore()->Result<()> {
++    let path=path()?;
++    let Some(mut journal):Option<Journal>=read_private(&path)? else{return Ok(())};
++    if journal.changes.is_empty() {return Ok(())}
++    let remaining=restore_changes(&journal.changes,sysproxy::restore_owned_native)?;
++    journal.changes=remaining;
++    write_private(&path,&journal)?;
++    ensure!(journal.changes.is_empty(),"network services unavailable; recovery journal retained");
++    Ok(())
++}
++
++/// Compact only after SCPreferences accepted the write. Interrupted writes retain their undo chain.
++pub(crate) fn commit() -> Result<()> {
++    let path=path()?;
++    let mut journal:Journal=read_private(&path)?.context("proxy journal missing after write")?;
++    let mut compacted:Vec<sysproxy::NativeProxyChange>=Vec::new();
++    for change in journal.changes {
++        if let Some(old)=compacted.iter_mut().find(|old|old.service_id==change.service_id) {
++            old.after=change.after;
++        } else {compacted.push(change);}
++    }
++    journal.changes=compacted;
++    write_private(&path,&journal)
++}
++
++fn restore_changes(changes:&[sysproxy::NativeProxyChange],mut restore:impl FnMut(&sysproxy::NativeProxyChange)->sysproxy::Result<sysproxy::RestoreOutcome>)->Result<Vec<sysproxy::NativeProxyChange>> {
++    let mut remaining=Vec::new();
++    for change in changes.iter().rev() {
++        match restore(change) {
++            Ok(sysproxy::RestoreOutcome::MissingService)=>remaining.push(change.clone()),
++            Ok(sysproxy::RestoreOutcome::ExternalChange)=>tracing::warn!("External network ownership preserved"),
++            Ok(_)=>{},
++            Err(error)=>return Err(error).context("owned network recovery incomplete"),
++        }
++    }
++    remaining.reverse();Ok(remaining)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn pending_write_is_undone_before_committed_predecessor() {
++        let first=sysproxy::NativeProxyChange{service_id:"wifi".into(),before:vec![1],after:vec![2]};
++        let pending=sysproxy::NativeProxyChange{service_id:"wifi".into(),before:vec![2],after:vec![3]};
++        for initial in [vec![2],vec![3],vec![9]] {
++            let mut current=initial.clone();
++            let remaining=restore_changes(&[first.clone(),pending.clone()],|change| {
++                if current==change.before {return Ok(sysproxy::RestoreOutcome::AlreadyRestored)}
++                if current!=change.after {return Ok(sysproxy::RestoreOutcome::ExternalChange)}
++                current=change.before.clone();Ok(sysproxy::RestoreOutcome::Restored)
++            }).unwrap();
++            assert!(remaining.is_empty());
++            assert_eq!(current,if initial==vec![9]{vec![9]}else{vec![1]});
++        }
++    }
++    #[test]
++    fn missing_service_and_failed_write_retain_recovery_work() {
++        let change=sysproxy::NativeProxyChange{service_id:"wifi".into(),before:vec![1],after:vec![2]};
++        let remaining=restore_changes(&[change.clone()],|_|Ok(sysproxy::RestoreOutcome::MissingService)).unwrap();
++        assert_eq!(remaining,vec![change.clone()]);
++        assert!(restore_changes(&[change],|_|Err(std::io::Error::other("injected write failure").into())).is_err());
++    }
++}
+--- vendor/upstream/clash-verge-service-ipc/src/core/reconcile.rs
++++ native/helper/src/core/reconcile.rs
+@@ -20,6 +20,8 @@
+ pub async fn reconcile_service_startup() -> Result<()> {
+     STARTUP_RECONCILED.store(false, Ordering::Release);
+     info!("Running service startup reconciliation");
++    #[cfg(target_os="macos")]
++    super::server::recover_owner_on_startup().await?;
+ 
+     let Some(record) = read_core_runtime_record().await? else {
+         STARTUP_RECONCILED.store(true, Ordering::Release);
+--- vendor/upstream/clash-verge-service-ipc/src/core/runtime_generation/assets.rs
++++ native/helper/src/core/runtime_generation/assets.rs
+@@ -195,6 +195,9 @@
+     owner: &AuthenticatedOwner,
+     bundle: &RuntimeBundle,
+ ) -> Result<PreparedRuntime, ServiceError> {
++    let mut bundle=bundle.clone();
++    bundle.yaml=crate::core::config_boundary::sanitize(&bundle.yaml).map_err(|e|invalid_asset(e.to_string()))?;
++    let bundle=&bundle;
+     let core = validate_core_path(&bundle.core_path)?;
+     let owner_paths = ensure_owner_state_directory(&owner.identity)
+         .map_err(|error| invalid_asset(format!("failed to secure owner state root: {error:#}")))?;
+@@ -929,7 +932,8 @@
+     }
+ }
+ 
+-#[cfg(all(test, unix))]
++// Runtime fixtures must never target the installed service directories.
++#[cfg(all(test, unix, feature = "test"))]
+ mod tests {
+     use super::{PreparedRuntime, prepare_runtime};
+     use crate::core::auth::{AuthenticatedOwner, ServiceError};
+@@ -988,7 +992,7 @@
+ 
+         assert_eq!(
+             std::fs::read_to_string(&prepared.clash_config.core_config.config_path)?,
+-            "mode: rule\n"
++            "mode: rule\nbind-address: 127.0.0.1\n"
+         );
+         assert_eq!(
+             std::fs::read(
+@@ -1066,7 +1070,7 @@
+         // A rejected bundle must leave the durable generation startable.
+         assert_eq!(
+             std::fs::read_to_string(&prepared.clash_config.core_config.config_path)?,
+-            "mode: rule\n"
++            "mode: rule\nbind-address: 127.0.0.1\n"
+         );
+         std::fs::remove_dir_all(app_root)?;
+         Ok(())
+@@ -1177,7 +1181,7 @@
+         let generation = PathBuf::from(&prepared.clash_config.core_config.config_dir);
+         assert_eq!(
+             std::fs::read_to_string(&prepared.clash_config.core_config.config_path)?,
+-            "mode: rule\n",
++            "mode: rule\nbind-address: 127.0.0.1\n",
+             "planning must leave the running core's configuration alone"
+         );
+         assert!(
+@@ -1189,7 +1193,7 @@
+ 
+         assert_eq!(
+             std::fs::read_to_string(&prepared.clash_config.core_config.config_path)?,
+-            "mode: global\n"
++            "mode: global\nbind-address: 127.0.0.1\n"
+         );
+         assert!(generation.join("providers/new.yaml").exists());
+         std::fs::remove_dir_all(app_root)?;
+@@ -1227,7 +1231,7 @@
+ 
+         assert_eq!(
+             std::fs::read_to_string(&live.clash_config.core_config.config_path)?,
+-            "mode: rule\n",
++            "mode: rule\nbind-address: 127.0.0.1\n",
+             "planning must not replace the configuration the running core is using"
+         );
+         assert_eq!(
+@@ -1240,7 +1244,7 @@
+ 
+         assert_eq!(
+             std::fs::read_to_string(&live.clash_config.core_config.config_path)?,
+-            "mode: global\n"
++            "mode: global\nbind-address: 127.0.0.1\n"
+         );
+         assert_eq!(std::fs::read(generation.join("providers/one.yaml"))?, b"second\n");
+         std::fs::remove_dir_all(app_root)?;
+@@ -1283,7 +1287,7 @@
+         );
+         assert_eq!(
+             std::fs::read_to_string(&second.clash_config.core_config.config_path)?,
+-            "mode: rule\n"
++            "mode: rule\nbind-address: 127.0.0.1\n"
+         );
+         assert_eq!(
+             std::fs::read(core_owned_state(&second))?,
+@@ -1378,7 +1382,7 @@
+         let generation = PathBuf::from(&prepared.clash_config.core_config.config_dir);
+         assert_eq!(
+             std::fs::read_to_string(&prepared.clash_config.core_config.config_path)?,
+-            "mode: rule\n",
++            "mode: rule\nbind-address: 127.0.0.1\n",
+             "the configuration must still be the one a core could be started against"
+         );
+         assert!(
+--- vendor/upstream/clash-verge-service-ipc/src/core/runtime_generation/staging.rs
++++ native/helper/src/core/runtime_generation/staging.rs
+@@ -157,6 +157,10 @@
+     owner: &AuthenticatedOwner,
+     bundle: &RuntimeBundle,
+ ) -> Result<StageRuntimeOutcome, ServiceError> {
++    let mut sanitized_bundle = bundle.clone();
++    sanitized_bundle.yaml = crate::core::config_boundary::sanitize(&bundle.yaml)
++        .map_err(|error| invalid_asset(error.to_string()))?;
++    let bundle = &sanitized_bundle;
+     let Some((core_pid, running)) = CORE_MANAGER.lock().await.running_core_config().await else {
+         return Ok(StageRuntimeOutcome::RestartRequired {
+             reason: StageRejection::CoreNotRunning,
+--- vendor/upstream/clash-verge-service-ipc/src/core/server.rs
++++ native/helper/src/core/server.rs
+@@ -173,6 +173,8 @@
+         }
+         match commit_active_owner_session(self.owner, self.proposed_session_token).await {
+             Ok(active) => {
++                #[cfg(target_os="macos")]
++                if let Err(error)=super::lease::issue(&active) {return self.rollback_commit_failure(error).await;}
+                 self.prepared_runtime
+                     .take()
+                     .context("prepared runtime disappeared during owner commit")?
+@@ -206,7 +208,7 @@
+ 
+ async fn clear_service_proxy() -> AnyResult<()> {
+     if SERVICE_PROXY_IS_LIVE {
+-        clear_proxy().await
++        crate::core::proxy::restore_owned_proxy().await
+     } else {
+         Ok(())
+     }
+@@ -215,7 +217,7 @@
+ /// Only the takeover waits for a network service; stopping keeps the immediate [`clear_proxy`].
+ async fn clear_previous_owner_proxy() -> AnyResult<()> {
+     if SERVICE_PROXY_IS_LIVE {
+-        clear_proxy_waiting_for_network().await
++        crate::core::proxy::restore_owned_proxy().await
+     } else {
+         Ok(())
+     }
+@@ -223,7 +225,7 @@
+ 
+ async fn compensate_service_proxy() -> AnyResult<()> {
+     if SERVICE_PROXY_IS_LIVE {
+-        apply_proxy(&MacosProxyConfig::Disabled).await
++        crate::core::proxy::restore_owned_proxy().await
+     } else {
+         Ok(())
+     }
+@@ -333,6 +335,8 @@
+ pub async fn stop_ipc_server() -> Result<()> {
+     let _lifecycle_guard = IPC_LIFECYCLE_LOCK.lock().await;
+ 
++    #[cfg(target_os="macos")]
++    expire_owner_if_needed(true).await.map_err(|error|kode_bridge::KodeBridgeError::custom(error.to_string()))?;
+     CORE_MANAGER
+         .lock()
+         .await
+@@ -378,6 +382,8 @@
+     set_service_lifecycle_state(ServiceLifecycleState::Running);
+     info!("IPC server started successfully. Waiting for shutdown signal...");
+ 
++    let mut lease_tick=tokio::time::interval(Duration::from_secs(1));
++    lease_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+     let mut restart_timestamps: Vec<Instant> = Vec::new();
+     let mut consecutive_attempt = 0u32;
+     tokio::pin!(shutdown);
+@@ -387,6 +393,12 @@
+             _ = &mut shutdown => {
+                 info!("Shutdown signal received. Stopping IPC server...");
+                 break;
++            }
++            _ = lease_tick.tick() => {
++                #[cfg(target_os="macos")]
++                if let Err(error)=expire_owner_if_needed(false).await {
++                    warn!("Owner recovery pending: {error:#}");
++                }
+             }
+             join_result = &mut server_handle => {
+                 let reason = match join_result {
+@@ -711,9 +723,6 @@
+                 Ok(result) => result,
+                 Err(error) => return service_error(error),
+             };
+-            if let Err(error) = cleanup_legacy_owner_files(&owner).await {
+-                warn!("Core start committed, but legacy owner cleanup will be retried later: {error}");
+-            }
+             info!("Core started successfully");
+             ok_json(StartClashResult {
+                 session: OwnerSessionHandle {
+@@ -722,6 +731,25 @@
+                 proxy_outcome,
+             })
+         })
++        .post(IpcCommand::MihomoControl.as_ref(), |ctx| async move {
++            let (request,owner)=match authenticate_request::<AuthenticatedSessionRequest<crate::MihomoControlRequest>>(&ctx) {ControlFlow::Continue(value)=>value,ControlFlow::Break(response)=>return response};
++            let _guard=match enter_owner_lifecycle(&owner,OwnerLifecycleGate::ActiveSession(&request.session)).await {ControlFlow::Continue(value)=>value,ControlFlow::Break(response)=>return response};
++            match super::control_boundary::execute(&owner.identity,&request.payload).await {Ok(value)=>ok_json(value),Err(error)=>service_unavailable(error.to_string())}
++        })
++        .post(IpcCommand::RenewOwner.as_ref(), |ctx| async move {
++            let (request, owner)=match authenticate_request::<AuthenticatedSessionRequest<()>>(&ctx) {
++                ControlFlow::Continue(value)=>value,ControlFlow::Break(response)=>return response,
++            };
++            let _guard=match enter_owner_lifecycle(&owner,OwnerLifecycleGate::ActiveSession(&request.session)).await {
++                ControlFlow::Continue(value)=>value,ControlFlow::Break(response)=>return response,
++            };
++            let active=match require_active_session(&owner,&request.session).await {
++                Ok(active)=>active,Err(error)=>return service_error(error),
++            };
++            #[cfg(target_os="macos")]
++            if let Err(error)=super::lease::renew(&active) {return service_unavailable(error.to_string());}
++            ok_empty("Owner renewed")
++        })
+         .get(IpcCommand::GetClashLogs.as_ref(), |ctx| async move {
+             trace!("Received GetClashLogs command");
+             let (_request, owner) = match authenticate_request::<AuthenticatedRequest<()>>(&ctx) {
+@@ -733,6 +761,15 @@
+                 ControlFlow::Break(response) => return response,
+             };
+             ok_json(LOG_RING.get_logs())
++        })
++        .get(IpcCommand::GetClashLogsSince.as_ref(), |ctx| async move {
++            let (request,owner)=match authenticate_request::<AuthenticatedRequest<crate::log_cursor::LogCursor>>(&ctx) {
++                ControlFlow::Continue(authenticated)=>authenticated,ControlFlow::Break(response)=>return response,
++            };
++            let _lifecycle_guard=match enter_owner_lifecycle(&owner,OwnerLifecycleGate::ActiveOwner).await {
++                ControlFlow::Continue(guard)=>guard,ControlFlow::Break(response)=>return response,
++            };
++            ok_json(LOG_RING.since(&request.payload))
+         })
+         .get(IpcCommand::GetClashLogSnapshot.as_ref(), |ctx| async move {
+             trace!("Received GetClashLogSnapshot command");
+@@ -985,7 +1022,8 @@
+ 
+ static OWNER_LIFECYCLE_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+ 
+-#[cfg(test)]
++// These fixtures mutate service state and require the isolated test paths.
++#[cfg(all(test, feature = "test"))]
+ mod owner_lifecycle_tests {
+     use super::{
+         OwnerProxyTransition, WINDOWS_CONTROL_PIPE_SDDL, owner_proxy_transition, require_active_owner,
+@@ -1212,3 +1250,28 @@
+         Ok(())
+     }
+ }
++
++#[cfg(target_os="macos")]
++pub async fn recover_owner_on_startup() -> AnyResult<()> { expire_owner_if_needed(false).await }
++
++#[cfg(target_os="macos")]
++async fn expire_owner_if_needed(force:bool) -> AnyResult<()> {
++    let _guard=OWNER_LIFECYCLE_LOCK.lock().await;
++    let active=load_active_owner().await?;
++    if let Some(active)=active.as_ref() {
++        if !force && super::lease::is_live(active)? {return Ok(())}
++    }
++    let restored=crate::core::proxy::restore_owned_proxy().await;
++    // Stopping the verified managed core removes its TUN device, routes and DNS hijack.
++    let stopped=CORE_MANAGER.lock().await.stop_core().await;
++    restored?;stopped?;
++    if let Some(active)=active {persist_owner_core_stopped_by_key(&active.owner_key).await?;}
++    clear_active_owner().await?;super::lease::clear()?;
++    Ok(())
++}
++
++#[cfg(target_os="macos")]
++pub async fn recover_after_service_stop() -> AnyResult<()> {
++    expire_owner_if_needed(true).await?;
++    super::reconcile::reconcile_service_startup().await
++}
+--- vendor/upstream/clash-verge-service-ipc/src/core/status.rs
++++ native/helper/src/core/status.rs
+@@ -66,7 +66,8 @@
+     }
+ }
+ 
+-#[cfg(test)]
++// These fixtures mutate service state and require the isolated test paths.
++#[cfg(all(test, feature = "test"))]
+ mod tests {
+     use super::{effective_service_state, service_status_snapshot};
+     use crate::core::auth::AuthenticatedOwner;
+--- vendor/upstream/clash-verge-service-ipc/src/core/structure.rs
++++ native/helper/src/core/structure.rs
+@@ -1,5 +1,5 @@
+ use serde::{Deserialize, Serialize};
+-#[cfg(feature = "client")]
++#[cfg(any(feature = "client",feature="standalone"))]
+ use serde_json::Value;
+ use sha2::{Digest as _, Sha256};
+ 
+@@ -329,7 +329,7 @@
+         Self {
+             directory: "./logs".to_string(),
+             max_log_size: 10 * 1024 * 1024, // 10 MB
+-            max_log_files: 8,
++            max_log_files: 3,
+         }
+     }
+ }
+@@ -509,3 +509,6 @@
+             })
+     }
+ }
++
++#[derive(Debug,Clone,Serialize,Deserialize)]
++pub struct MihomoControlRequest {pub method:String,pub path:String,pub body:Option<serde_json::Value>}
+--- vendor/upstream/clash-verge-service-ipc/src/core/trusted_client.rs
++++ native/helper/src/core/trusted_client.rs
+@@ -0,0 +1,16 @@
++use anyhow::{Result,ensure};
++use serde::{Serialize,Deserialize};
++#[derive(Serialize,Deserialize)]
++struct Trust { hashes:Vec<String> }
++fn path()->Result<std::path::PathBuf>{Ok(super::paths::service_paths()?.persistent_state_dir().join("trusted-clients.json"))}
++pub(crate) fn verify(context:&kode_bridge::RequestContext)->Result<()> {
++    let token=context.client_info.peer_credentials.audit_token.as_ref().ok_or_else(||anyhow::anyhow!("peer audit token unavailable"))?;
++    let trust:Trust=super::lease::read_private(&path()?)?.ok_or_else(||anyhow::anyhow!("client trust is not configured"))?;
++    ensure!(sysproxy::verify_audit_client(token,&trust.hashes)?,"caller code signature rejected");Ok(())
++}
++/// Called only by the elevated installer; the service never exposes this as an IPC mutation.
++pub fn register(hashes:Vec<String>)->Result<()> {
++    ensure!(unsafe{platform_lib::geteuid()}==0,"client trust registration requires root");
++    ensure!(!hashes.is_empty() && hashes.len()<=32 && hashes.iter().all(|s|s.len()==40 && s.bytes().all(|b|b.is_ascii_hexdigit())),"invalid client code hashes");
++    super::lease::write_private(&path()?,&Trust{hashes})
++}
+--- vendor/upstream/clash-verge-service-ipc/src/core/trusted_core_location.rs
++++ native/helper/src/core/trusted_core_location.rs
+@@ -32,41 +32,37 @@
+ 
+ #[cfg(target_os = "macos")]
+ fn check_platform_location(canonical: &Path) -> Result<(), ServiceError> {
+-    // Stop at the protected state root: macOS makes its parent admin-group-writable.
+-    let paths = crate::core::paths::service_paths().map_err(|error| untrusted(error.to_string()))?;
+-    let state_root = paths.persistent_state_dir();
+-    if canonical.starts_with(state_root) {
+-        return require_root_owned_chain(canonical, Some(state_root));
+-    }
+-    if !is_trusted_macos_location(canonical) {
+-        return Err(untrusted(format!(
+-            "core path {canonical:?} is under neither {state_root:?} nor {MACOS_APPLICATIONS_ROOT}"
+-        )));
+-    }
+-    // Reject group/other-writable components below /Applications; its admin-writable root is exempt.
+-    use std::os::unix::fs::MetadataExt as _;
+-    for component in canonical.ancestors() {
+-        if component == Path::new(MACOS_APPLICATIONS_ROOT) {
+-            break;
+-        }
+-        let metadata = std::fs::symlink_metadata(component)
+-            .map_err(|error| untrusted(format!("failed to inspect core path {component:?}: {error}")))?;
+-        if metadata.mode() & 0o022 != 0 {
+-            return Err(untrusted(format!(
+-                "core path {component:?} is writable by group or other"
+-            )));
+-        }
+-    }
++    use sha2::{Digest as _,Sha256};
++    use std::io::Read;
++    let paths=crate::core::paths::service_paths().map_err(|e|untrusted(e.to_string()))?;
++    if !is_trusted_macos_location(canonical) {return Err(untrusted("core must be an approved binary in the SI root-owned core directory"));}
++    require_root_owned_chain(canonical,Some(paths.persistent_state_dir()))?;
++    let name=canonical.file_name().and_then(|s|s.to_str()).unwrap_or("");
++    #[cfg(target_arch="aarch64")]
++    let expected=match name {
++        "verge-mihomo"=>"4b72628bd46113be90b63a18c483bbb55a7f9395e396926a2b0a99905d4f2386",
++        "verge-mihomo-alpha"=>"f0d0d1eeb92137e0a28fc23612494c648ea919fb9bed2891ffd81d10453a8961",
++        _=>return Err(untrusted("unapproved core name")),
++    };
++    #[cfg(target_arch="x86_64")]
++    let expected=match name {
++        "verge-mihomo"=>"55bca124906a40a7140ee7537a305b34c2c31806f3d724629089dc2960ea0993",
++        "verge-mihomo-alpha"=>"baa7f8ae796a4491cc2378d2e5081e8f68aa368ce5455d8320413be3318c21a4",
++        _=>return Err(untrusted("unapproved core name")),
++    };
++    let mut file=std::fs::File::open(canonical).map_err(|e|untrusted(e.to_string()))?;
++    let mut digest=Sha256::new();let mut buffer=[0;65536];
++    loop {let read=file.read(&mut buffer).map_err(|e|untrusted(e.to_string()))?;if read==0{break}digest.update(&buffer[..read]);}
++    let actual=digest.finalize().iter().map(|b|format!("{b:02x}")).collect::<String>();
++    if actual!=expected {return Err(untrusted("installed core digest does not match pinned manifest"));}
+     Ok(())
+ }
+ 
+ #[cfg(target_os = "macos")]
+-const MACOS_APPLICATIONS_ROOT: &str = "/Applications";
+-
+-/// Allow system Applications only; bundles may be owned by the user who installed them.
+-#[cfg(target_os = "macos")]
+-fn is_trusted_macos_location(canonical: &Path) -> bool {
+-    canonical.starts_with(MACOS_APPLICATIONS_ROOT)
++fn is_trusted_macos_location(canonical:&Path)->bool {
++    let Ok(paths)=crate::core::paths::service_paths() else{return false};
++    canonical.parent()==Some(paths.core_dir().as_path())
++        && matches!(canonical.file_name().and_then(|s|s.to_str()),Some("verge-mihomo"|"verge-mihomo-alpha"))
+ }
+ 
+ /// Every component from the core down to `/` must be root-owned and unwritable by group or other.
+@@ -568,8 +564,8 @@
+     use std::path::Path;
+ 
+     #[test]
+-    fn accepts_a_core_inside_the_applications_bundle() {
+-        assert!(is_trusted_macos_location(Path::new(
++    fn rejects_a_core_inside_a_user_replaceable_applications_bundle() {
++        assert!(!is_trusted_macos_location(Path::new(
+             "/Applications/Clash Verge.app/Contents/MacOS/verge-mihomo"
+         )));
+     }
+@@ -600,10 +596,10 @@
+     use std::path::Path;
+ 
+     #[test]
+-    fn the_production_gate_rejects_a_core_outside_applications() {
++    fn production_gate_rejects_arbitrary_paths_even_if_root_owned() {
+         assert!(require_trusted_core_location(Path::new("/tmp/verge-mihomo")).is_err());
+         // Use a real root-owned path to exercise the production metadata check.
+-        assert!(require_trusted_core_location(Path::new("/Applications/Utilities")).is_ok());
++        assert!(require_trusted_core_location(Path::new("/Applications/Utilities")).is_err());
+         assert!(
+             require_trusted_core_location(Path::new(
+                 "/Applications/does-not-exist.app/Contents/MacOS/verge-mihomo"
+--- vendor/upstream/clash-verge-service-ipc/src/lib.rs
++++ native/helper/src/lib.rs
+@@ -8,6 +8,10 @@
+ #[cfg(feature = "client")]
+ mod client;
+ 
++pub use core::MihomoControlRequest;
++pub use core::control_boundary::validate as validate_mihomo_control;
++#[cfg(any(feature="client",feature="standalone"))]
++pub use core::control_boundary::metric_snapshot as read_mihomo_metric;
+ pub use channel::{
+     CHANNEL_IDENTITY, ChannelIdentity, MACOS_APP_BUNDLE_ID, MACOS_SERVICE_ID, SERVICE_DISPLAY_NAME, SERVICE_SLUG,
+     WINDOWS_SERVICE_NAME,
+@@ -43,9 +47,9 @@
+ pub use client::*;
+ 
+ #[cfg(all(target_os = "macos", not(feature = "test"), not(feature = "development-channel")))]
+-pub static IPC_PATH: &str = "/var/run/clash-verge-service/service.sock";
++pub static IPC_PATH: &str = "/var/run/si-assist-service/service.sock";
+ #[cfg(all(target_os = "macos", not(feature = "test"), feature = "development-channel"))]
+-pub static IPC_PATH: &str = "/var/run/clash-verge-service-dev/service.sock";
++pub static IPC_PATH: &str = "/var/run/si-assist-service-dev/service.sock";
+ #[cfg(all(
+     unix,
+     not(target_os = "macos"),
+@@ -76,11 +80,21 @@
+ 
+ pub static VERSION: &str = env!("CARGO_PKG_VERSION");
+ pub const PROTOCOL_EPOCH: u16 = 2;
+-pub const PROTOCOL_REVISION: u16 = 5;
+-pub const MIN_SUPPORTED_CLIENT_REVISION: u16 = 5;
+-pub const MIN_REQUIRED_SERVICE_REVISION: u16 = 5;
++pub const PROTOCOL_REVISION: u16 = 9;
++pub const MIN_SUPPORTED_CLIENT_REVISION: u16 = 7;
++pub const MIN_REQUIRED_SERVICE_REVISION: u16 = 8;
+ /// Revision that introduced `/clash/stage-runtime`.
+ /// This is a capability gate, not the minimum compatible service revision.
+ pub const MIN_SERVICE_REVISION_FOR_RUNTIME_STAGING: u16 = 2;
+ /// Capability revision for `/clash/runtime-file`.
+ pub const MIN_SERVICE_REVISION_FOR_RUNTIME_FILE_READ: u16 = 3;
++
++#[cfg(all(target_os="macos", feature="standalone"))]
++pub use core::server::recover_after_service_stop;
++
++#[cfg(all(feature="standalone",target_os="macos"))]
++pub use core::trusted_client::register as register_trusted_clients;
++
++pub mod proxy_destination;
++
++pub mod log_cursor;
+--- vendor/upstream/clash-verge-service-ipc/src/log_cursor.rs
++++ native/helper/src/log_cursor.rs
+@@ -0,0 +1,14 @@
++//! Revision 9 bounded, ordered read-only log batches.
++use serde::{Deserialize, Serialize};
++#[derive(Clone, Debug, Default, Serialize, Deserialize)]
++pub struct LogCursor {
++    pub stream: Option<String>,
++    pub after: u64,
++}
++#[derive(Clone, Debug, Serialize, Deserialize)]
++pub struct LogBatch {
++    pub stream: String,
++    pub next: u64,
++    pub dropped: bool,
++    pub lines: Vec<String>,
++}
+--- vendor/upstream/clash-verge-service-ipc/src/management.rs
++++ native/helper/src/management.rs
+@@ -219,6 +219,7 @@
+         return Ok(false);
+     }
+     let mut cores = Vec::new();
++    let mut client_hashes = Vec::new();
+     let mut ensure = false;
+     let mut core_only = false;
+     let mut prompt = "Install Clash Verge service and approved cores".to_owned();
+@@ -226,6 +227,11 @@
+     let mut gid = unsafe { platform_lib::getgid() };
+     while let Some(argument) = arguments.next() {
+         match argument.to_str() {
++            Some("--client-cdhash") => {
++                let hash=arguments.next().context("--client-cdhash requires a hash")?.to_string_lossy().into_owned();
++                anyhow::ensure!(hash.len()==40 && hash.bytes().all(|b|b.is_ascii_hexdigit()),"invalid client hash");
++                client_hashes.push(hash);
++            }
+             Some("--ensure") => ensure = true,
+             Some("--core-only") => core_only = true,
+             Some("--core") => {
+@@ -265,8 +271,9 @@
+     let PreparedCores {
+         staging,
+         requirements,
+-        arguments: elevated,
++        arguments: mut elevated,
+     } = PreparedCores::new(&cores, core_only)?;
++    for hash in client_hashes {elevated.push("--client-cdhash".into());elevated.push(hash.into());}
+     let service_digest = if core_only { None } else { Some(sha256_file(&service)?) };
+     let runtime = tokio::runtime::Runtime::new()?;
+     let verified = |status: &crate::InstallationStatus| {
+@@ -568,3 +575,15 @@
+         assert_eq!(windows_quote(r#"a"b"#), r#""a\"b""#);
+     }
+ }
++
++/// Prepare only the fixed SI Assist uninstaller or its crash-recovery validation action.
++/// This preserves the upstream system authorization flow and never accepts a shell command.
++#[cfg(all(target_os="macos",feature="client"))]
++pub fn prepare_maintenance_if_requested()->Result<bool> {
++    let args=std::env::args_os().skip(1).collect::<Vec<_>>();
++    let action=match args.as_slice(){[one] if one=="--prepare-uninstall"=>None,[one] if one=="--prepare-crash-validation"=>Some("--crash-validation"),[one] if one=="--prepare-expired-crash-validation"=>Some("--expired-crash-validation"),_=>return Ok(false)};
++    let staging=Staging::new()?;let current=std::env::current_exe()?;let executable=staging.0.join(current.file_name().context("maintenance executable has no name")?);std::fs::copy(&current,&executable)?;
++    let arguments=action.map(|s|vec![OsString::from(s)]).unwrap_or_default();
++    elevate(&executable,&arguments,unsafe{platform_lib::getgid()},if action.is_some(){"SI Assist 验证独立服务被杀后的 launchd 恢复"}else{"SI Assist 恢复网络并卸载独立服务"})?;
++    Ok(true)
++}
+--- vendor/upstream/clash-verge-service-ipc/src/proxy_destination.rs
++++ native/helper/src/proxy_destination.rs
+@@ -0,0 +1,70 @@
++//! Explicit system-proxy destinations are data, never shell commands or control endpoints.
++use anyhow::{ensure, Result};
++pub fn validate_host(host: &str) -> Result<()> {
++    ensure!(
++        !host.is_empty() && host.len() <= 253 && host.is_ascii(),
++        "Proxy host must be an ASCII hostname or IP address (1–253 bytes)"
++    );
++    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
++        ensure!(
++            !ip.is_unspecified() && !ip.is_multicast(),
++            "Proxy host cannot be unspecified or multicast"
++        );
++        if let std::net::IpAddr::V4(ip) = ip {
++            ensure!(!ip.is_broadcast(), "Proxy host cannot be broadcast");
++        }
++        return Ok(());
++    }
++    ensure!(
++        matches!(url::Host::parse(host), Ok(url::Host::Domain(_))),
++        "Use a canonical IP address or hostname"
++    );
++    ensure!(
++        !host.ends_with('.')
++            && host.split('.').all(|label| !label.is_empty()
++                && label.len() <= 63
++                && !label.starts_with('-')
++                && !label.ends_with('-')
++                && label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')),
++        "Proxy host must not contain a URL, port, credentials or control characters"
++    );
++    Ok(())
++}
++pub fn needs_revision9(host: &str) -> bool {
++    !host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
++}
++pub fn authority(host: &str) -> String {
++    if host.contains(':') {
++        format!("[{host}]")
++    } else {
++        host.into()
++    }
++}
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn validates_destination_data_without_expanding_control_or_shell_syntax() {
++        for host in ["127.0.0.1", "::1", "localhost", "proxy.example.invalid", "192.0.2.1"] {
++            assert!(validate_host(host).is_ok(), "{host}");
++        }
++        for host in [
++            "",
++            "0.0.0.0",
++            "::",
++            "224.0.0.1",
++            "255.255.255.255",
++            "user@host",
++            "host:7890",
++            "host\n",
++            "https://host",
++            "-host.invalid",
++            "host..invalid",
++            "a;echo",
++        ] {
++            assert!(validate_host(host).is_err(), "{host}");
++        }
++        assert!(needs_revision9("localhost"));
++        assert!(!needs_revision9("127.0.0.1"));
++    }
++}

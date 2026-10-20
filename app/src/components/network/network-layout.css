@@ -1,0 +1,212 @@
+/* Respond to usable content width, including changes to the sidebar. */
+.network-home {
+  container-type: inline-size;
+  container-name: network-home;
+}
+.network-home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@container network-home (min-width: 640px) {
+  .network-home-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.network-home-card {
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  background: var(--bg-app);
+  overflow: hidden;
+}
+.network-home-card > div:first-child {
+  background: var(--bg-sidebar);
+}
+.network-nodes {
+  --node-fast: #18704b;
+  --node-fast-bg: #edf8f2;
+  --node-medium: #315da0;
+  --node-medium-bg: #eff4fc;
+  --node-slow: #946009;
+  --node-slow-bg: #fff7e6;
+  --node-error: #b13a46;
+  --node-error-bg: #fff0f1;
+}
+.dark .network-nodes {
+  --node-fast: #79d6a8;
+  --node-fast-bg: #20392e;
+  --node-medium: #9cbdff;
+  --node-medium-bg: #26334c;
+  --node-slow: #edc578;
+  --node-slow-bg: #403520;
+  --node-error: #ffa0a8;
+  --node-error-bg: #462b32;
+}
+.proxy-group-nav {
+  padding-bottom: 8px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.proxy-group-nav button {
+  background: var(--bg-card);
+  color: var(--text-2);
+}
+.proxy-group {
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  background: var(--bg-sidebar);
+  scroll-margin-top: 8px;
+}
+.proxy-group-header {
+  border-radius: 10px 10px 0 0;
+  background: var(--bg-sidebar);
+}
+.proxy-group-count {
+  flex-shrink: 0;
+  color: var(--text-2);
+}
+.proxy-node-grid {
+  display: grid;
+  gap: 6px;
+  /* Respect the chosen column limit, reducing it when cards would get cramped. */
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(
+      min(
+        100%,
+        max(
+          184px,
+          calc((100% - 6px * (var(--node-columns) - 1)) / var(--node-columns))
+        )
+      ),
+      1fr
+    )
+  );
+}
+.proxy-node-card {
+  position: relative;
+  min-width: 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: 7px;
+  background: var(--bg-app);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+.proxy-node-card:hover {
+  border-color: hsl(var(--primary) / 45%);
+}
+.proxy-node-card[data-selected="true"] {
+  border-color: hsl(var(--primary) / 65%);
+  background: hsl(var(--primary) / 5%);
+  box-shadow: inset 3px 0 0 hsl(var(--primary));
+}
+.proxy-node-select {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 3px;
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 10px;
+  text-align: left;
+  border-radius: inherit;
+}
+.proxy-node-name {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+.proxy-node-indicator {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  border-radius: 50%;
+  color: hsl(var(--border));
+}
+.proxy-node-card[data-selected="true"] .proxy-node-indicator {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.proxy-node-meta {
+  display: flex;
+  gap: 3px;
+  padding-right: 82px;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 18px;
+}
+.proxy-node-meta > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.proxy-node-meta > span + span {
+  flex-shrink: 0;
+}
+.proxy-node-delay {
+  position: absolute;
+  bottom: 5px;
+  right: 6px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  min-width: 52px;
+  max-width: calc(100% - 12px);
+  padding: 2px 5px;
+  border-radius: 5px;
+  color: var(--text-2);
+  background: var(--bg-card);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  transition: filter 160ms ease;
+}
+.proxy-node-delay:hover {
+  filter: brightness(0.96);
+}
+.proxy-node-delay[data-tone="fast"] {
+  color: var(--node-fast);
+  background: var(--node-fast-bg);
+}
+.proxy-node-delay[data-tone="medium"] {
+  color: var(--node-medium);
+  background: var(--node-medium-bg);
+}
+.proxy-node-delay[data-tone="slow"] {
+  color: var(--node-slow);
+  background: var(--node-slow-bg);
+}
+.proxy-node-delay[data-tone="error"] {
+  color: var(--node-error);
+  background: var(--node-error-bg);
+}
+.proxy-node-select:focus-visible,
+.proxy-node-delay:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 3px;
+}
+.proxy-node-select:disabled,
+.proxy-node-delay:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+@media (prefers-reduced-motion: reduce) {
+  .proxy-node-card,
+  .proxy-node-delay {
+    transition: none;
+  }
+}

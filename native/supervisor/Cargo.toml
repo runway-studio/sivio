@@ -1,0 +1,12 @@
+[package]
+name = "si-network-supervisor"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+[dependencies]
+serde_yaml_ng="=0.10.0"
+sha2 = "0.10"
+libc = "0.2"
+[profile.dev]
+debug=0
+incremental=false

@@ -1,0 +1,77 @@
+{
+  "iteration_policy": {
+    "enabled": true,
+    "max_iterations": 4,
+    "stop_score": 90,
+    "min_gain": 5
+  },
+  "iterations": [
+    {
+      "iteration_id": "review-1",
+      "iteration_index": 1,
+      "quality_score": 82,
+      "score_breakdown": {
+        "goal_fit": 18,
+        "user_business_closure": 16,
+        "scope_clarity": 13,
+        "acceptance_criteria": 12,
+        "risks_dependencies": 7,
+        "engineering_actionability": 12,
+        "clarity": 4
+      },
+      "critical_findings": [
+        "R1",
+        "R2",
+        "R3",
+        "R4"
+      ],
+      "improvement_candidates": [
+        {
+          "title": "修复重试、秘密、helper恢复与安装失败约定",
+          "priority": "P1",
+          "reason": "现有文字不能唯一决定关键失败行为",
+          "expected_gain": 9,
+          "cost": "medium",
+          "verification": "新增针对性情景并重跑严格与覆盖检查",
+          "owner_skill": "opc-openspec-change"
+        }
+      ],
+      "expected_gain": 9,
+      "confidence": "medium",
+      "evidence": [
+        "quality-gates.md 第1轮"
+      ],
+      "decision": "continue",
+      "next_iteration_task": "仅修订R1–R6并逐项复核"
+    },
+    {
+      "iteration_id": "review-2",
+      "iteration_index": 2,
+      "max_iterations": 4,
+      "quality_score": 93,
+      "score_breakdown": {
+        "goal_fit": 19,
+        "user_business_closure": 18,
+        "scope_clarity": 14,
+        "acceptance_criteria": 14,
+        "risks_dependencies": 9,
+        "engineering_actionability": 14,
+        "clarity": 5
+      },
+      "critical_findings": [],
+      "improvement_candidates": [],
+      "expected_gain": 2,
+      "confidence": "medium",
+      "evidence": [
+        "quality-gates.md 第2轮",
+        "traceability-validation.json",
+        "openspec-validation.json"
+      ],
+      "decision": "stop",
+      "stop_reason": "quality_reached",
+      "next_iteration_task": null
+    }
+  ],
+  "verification_scope": "planning_only",
+  "implementation_status": "not_started"
+}

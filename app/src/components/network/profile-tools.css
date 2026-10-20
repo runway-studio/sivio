@@ -1,0 +1,53 @@
+.profile-sequence-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1.4fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 740px) {
+  .profile-sequence-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Editable controls must contrast with the tinted editor panel. */
+.profile-sequence-editor {
+  --editor-field-bg: #fff;
+  --editor-field-border: #c6c8d2;
+}
+.dark .profile-sequence-editor {
+  --editor-field-bg: #303039;
+  --editor-field-border: #626273;
+}
+.profile-sequence-editor :is(input:not([type="checkbox"]), select, textarea) {
+  background-color: var(--editor-field-bg);
+  border-color: var(--editor-field-border);
+  color: var(--text-1);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.profile-sequence-editor input::placeholder,
+.profile-sequence-editor textarea::placeholder {
+  color: var(--text-2);
+  opacity: 1;
+}
+.profile-sequence-editor
+  :is(input:not([type="checkbox"]), select, textarea):not(:disabled):hover {
+  border-color: hsl(var(--ring) / 0.6);
+}
+.profile-sequence-editor
+  :is(input:not([type="checkbox"]), select, textarea):not(:disabled):focus {
+  border-color: hsl(var(--ring));
+  outline: none;
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.16);
+}
+.profile-sequence-editor
+  :is(input:not([type="checkbox"]), select, textarea):disabled {
+  background-color: var(--bg-subtle);
+  border-color: var(--border-strong);
+  color: var(--text-3);
+  cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+}

@@ -1,0 +1,303 @@
+{
+  "scope": "Design asset export and native ICNS decoding; not application packaging or Dock integration",
+  "checks": [
+    {
+      "name": "si-assist-mark.svg no embedded raster or active content",
+      "passed": true
+    },
+    {
+      "name": "si-assist-mark.svg contains two editable paths",
+      "passed": true
+    },
+    {
+      "name": "si-assist-mark.svg contains node circle",
+      "passed": true
+    },
+    {
+      "name": "si-assist-app-icon.svg no embedded raster or active content",
+      "passed": true
+    },
+    {
+      "name": "si-assist-app-icon.svg contains two editable paths",
+      "passed": true
+    },
+    {
+      "name": "si-assist-app-icon.svg contains node circle",
+      "passed": true
+    },
+    {
+      "name": "10 Xcode image slots",
+      "passed": true
+    },
+    {
+      "name": "10 iconset images",
+      "passed": true
+    },
+    {
+      "name": "icon_16x16.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "AppIcon.appiconset/icon_16x16.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_16x16.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "SI Assist.iconset/icon_16x16.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_16x16@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "AppIcon.appiconset/icon_16x16@2x.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_16x16@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "SI Assist.iconset/icon_16x16@2x.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_32x32.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "AppIcon.appiconset/icon_32x32.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_32x32.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "SI Assist.iconset/icon_32x32.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_32x32@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "AppIcon.appiconset/icon_32x32@2x.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_32x32@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "SI Assist.iconset/icon_32x32@2x.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_128x128.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "AppIcon.appiconset/icon_128x128.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_128x128.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "SI Assist.iconset/icon_128x128.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_128x128@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "AppIcon.appiconset/icon_128x128@2x.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_128x128@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "SI Assist.iconset/icon_128x128@2x.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_256x256.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "AppIcon.appiconset/icon_256x256.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_256x256.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "SI Assist.iconset/icon_256x256.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_256x256@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "AppIcon.appiconset/icon_256x256@2x.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_256x256@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "SI Assist.iconset/icon_256x256@2x.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_512x512.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "AppIcon.appiconset/icon_512x512.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_512x512.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "SI Assist.iconset/icon_512x512.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_512x512@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "AppIcon.appiconset/icon_512x512@2x.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "icon_512x512@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "SI Assist.iconset/icon_512x512@2x.png expected dimensions",
+      "passed": true
+    },
+    {
+      "name": "si-assist-mark-1024.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "si-assist-mark-1024.png 1024 square",
+      "passed": true
+    },
+    {
+      "name": "si-assist-app-icon-1024.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "si-assist-app-icon-1024.png 1024 square",
+      "passed": true
+    },
+    {
+      "name": "ICNS header and container length",
+      "passed": true
+    },
+    {
+      "name": "ICNS native decode yields 10 PNGs",
+      "passed": true
+    },
+    {
+      "name": "icon_16x16.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "roundtrip icon_16x16.png",
+      "passed": true
+    },
+    {
+      "name": "icon_16x16@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "roundtrip icon_16x16@2x.png",
+      "passed": true
+    },
+    {
+      "name": "icon_32x32.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "roundtrip icon_32x32.png",
+      "passed": true
+    },
+    {
+      "name": "icon_32x32@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "roundtrip icon_32x32@2x.png",
+      "passed": true
+    },
+    {
+      "name": "icon_128x128.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "roundtrip icon_128x128.png",
+      "passed": true
+    },
+    {
+      "name": "icon_128x128@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "roundtrip icon_128x128@2x.png",
+      "passed": true
+    },
+    {
+      "name": "icon_256x256.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "roundtrip icon_256x256.png",
+      "passed": true
+    },
+    {
+      "name": "icon_256x256@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "roundtrip icon_256x256@2x.png",
+      "passed": true
+    },
+    {
+      "name": "icon_512x512.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "roundtrip icon_512x512.png",
+      "passed": true
+    },
+    {
+      "name": "icon_512x512@2x.png PNG RGBA",
+      "passed": true
+    },
+    {
+      "name": "roundtrip icon_512x512@2x.png",
+      "passed": true
+    }
+  ],
+  "icnsSha256": "26a19d4c50b514d7ef0b1f8ee205769516512e6bffa9f0b81cfcb08decb13415",
+  "icnsBytes": 171071
+}

@@ -1,0 +1,121 @@
+{
+  "evidenceRoot": "../../../../build/reports",
+  "fullAcceptance": "not-passed",
+  "entries": [
+    {
+      "features": [
+        "F01",
+        "F02"
+      ],
+      "task": "T05",
+      "status": "partial",
+      "verified": [
+        "RUN16 initial and fully initialized Tools menu each has one Network entry",
+        "Two renderer destroy/recreate cycles restore a usable stopped workspace",
+        "Final helper9 App identity registered"
+      ],
+      "evidence": [
+        "run16-delivery-review.json",
+        "run16-menu-tests.log"
+      ],
+      "remaining": [
+        "Complete launch/autostart/shortcut combinations",
+        "Earlier 20-cycle evidence is separate; no claim of a new 20-cycle run"
+      ]
+    },
+    {
+      "features": [
+        "F12"
+      ],
+      "task": "T21",
+      "status": "partial",
+      "verified": [
+        "10000 synthetic sessions navigation remount p95 33.5ms",
+        "Index invalidation for changes/deletes and bounded latest-index cache"
+      ],
+      "evidence": [
+        "browser-scale-run15.json",
+        "run15-ui-scale-final.log"
+      ],
+      "remaining": [
+        "Native full data set and all supported tools real sanitized session examples"
+      ]
+    },
+    {
+      "features": [
+        "F16",
+        "F17"
+      ],
+      "task": "T11/T27",
+      "status": "partial",
+      "verified": [
+        "100 loopback requests added p95 2.523ms",
+        "20 streams for 603.72s with 12000 frames and no loss/cross-stream",
+        "20 cancellations release upstream"
+      ],
+      "evidence": [
+        "router-performance-run15.json",
+        "router-soak-run15.log"
+      ],
+      "remaining": [
+        "All protocol directions/managed-network/TUN combinations and live accounts"
+      ]
+    },
+    {
+      "features": [
+        "F21"
+      ],
+      "task": "T14",
+      "status": "partial",
+      "verified": [
+        "1000 synthetic nodes paginated 60 at a time; final page reachable and selectable"
+      ],
+      "evidence": [
+        "run15-ui-scale-final.log"
+      ],
+      "remaining": [
+        "Complete native large-node operation matrix"
+      ]
+    },
+    {
+      "features": [
+        "F29",
+        "F31",
+        "F33"
+      ],
+      "task": "T06/T27",
+      "status": "partial",
+      "verified": [
+        "9 process SIGKILL recovery phases followed by fresh Database::init and idempotent reopening",
+        "Real ENOSPC preparation rejection preserves original DB/Skills",
+        "Read-only atomic file replacement preserves original",
+        "Tampered recovery validation no longer creates absent Skills root"
+      ],
+      "evidence": [
+        "restore-crash-run15.log",
+        "run15-disk-full-native-final.log"
+      ],
+      "remaining": [
+        "All transactional injection points and clean-machine external restore matrix"
+      ]
+    },
+    {
+      "features": [
+        "F36"
+      ],
+      "task": "T28",
+      "status": "partial",
+      "verified": [
+        "arm64 RUN16 and Intel RUN7 packaged; strict ad-hoc codesign/Mach-O/ZIP hash verified"
+      ],
+      "evidence": [
+        "final-packages-verified-run16.json"
+      ],
+      "remaining": [
+        "Intel/macOS12 physical acceptance",
+        "Clean-machine install/upgrade/downgrade/uninstall",
+        "Stable release signing, notarization, updater channel and complete license notices"
+      ]
+    }
+  ]
+}

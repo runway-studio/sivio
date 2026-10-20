@@ -1,0 +1,14 @@
+{
+  "status": "passed",
+  "requirements": 36,
+  "scenarios": 78,
+  "capabilities": 6,
+  "tasks": 28,
+  "coverage_rows": 36,
+  "local_links_checked": 65,
+  "dependency_graph": "acyclic",
+  "errors": [],
+  "limitations": [
+    "检查文档格式、引用和覆盖关系，不验证代码行为、网络权限、性能或上游完整运行能力。"
+  ]
+}

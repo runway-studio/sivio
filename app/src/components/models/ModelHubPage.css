@@ -1,0 +1,21 @@
+.model-hub-page {
+  container-type: inline-size;
+}
+.model-picker-body {
+  display: grid;
+  gap: 20px;
+  margin-top: 20px;
+  align-items: start;
+}
+.model-picker-catalog {
+  max-height: 52vh;
+  min-height: 180px;
+}
+@container (min-width: 780px) {
+  .model-picker-body {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+  .model-picker-catalog {
+    max-height: 65vh;
+  }
+}

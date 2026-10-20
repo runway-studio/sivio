@@ -1,0 +1,74 @@
+:root {
+  --primary: 252 63% 59%;
+  --primary-foreground: 0 0% 100%;
+  --bg-app: #fff;
+  --bg-sidebar: #fbfbfb;
+  --bg-card: #f5f5f7;
+  --bg-subtle: #eaeaef;
+  --bg-selected: #f0ebfc;
+  --border-strong: #e1e2e8;
+  --text-1: #202124;
+  --text-2: #626773;
+  --text-3: #626773;
+  --action-bg: #7055d8;
+  --action-hover: #6247c7;
+  --action-text: #7055d8;
+  --action-soft: #f0ebfc;
+  --ring: 252 63% 59%;
+  --success: #24825d;
+  --success-text: #207650;
+  --card: 240 11% 96%;
+}
+.dark {
+  --primary: 253 100% 81%;
+  --bg-app: #1b1b20;
+  --bg-sidebar: #202025;
+  --bg-card: #27272f;
+  --bg-subtle: #34343e;
+  --bg-selected: #38304f;
+  --text-1: #f1f1f4;
+  --text-2: #afb0bd;
+  --text-3: #afb0bd;
+  --action-bg: #b4a0ff;
+  --action-fg: #211a36;
+  --action-hover: #c1afff;
+  --action-text: #b4a0ff;
+  --action-soft: #38304f;
+  --ring: 253 100% 81%;
+  --card: 240 9% 17%;
+}
+body {
+  font-family: "Helvetica Neue", "PingFang SC", Arial, sans-serif;
+}
+
+/* Neutral window chrome separates the three levels without changing the accent. */
+:root {
+  --shell-rail: #f3f3f4;
+  --shell-border: #e7e7e8;
+  --shell-shadow: 0 2px 12px rgb(25 28 31 / 4%);
+}
+.dark {
+  --shell-rail: #16161b;
+  --shell-border: #303037;
+  --shell-shadow: 0 2px 12px rgb(0 0 0 / 16%);
+}
+.sivio-shell,
+.sivio-domain-rail {
+  background: var(--shell-rail);
+}
+.sivio-window-bar {
+  padding-inline: 104px 20px;
+}
+.sivio-shell-body {
+  padding-inline-end: 8px;
+  padding-bottom: 8px;
+}
+.sivio-workspace {
+  border: 1px solid var(--shell-border);
+  border-radius: 16px;
+  box-shadow: var(--shell-shadow);
+  background: var(--bg-app);
+}
+.sivio-directory {
+  border-color: var(--shell-border);
+}

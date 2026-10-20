@@ -1,0 +1,16 @@
+[
+  {
+    "channel": "stable",
+    "revision": "88dcbf7f1614a67c3b36b848ee3592dfa92ada36",
+    "ref": "v1.19.32",
+    "url": "https://codeload.github.com/MetaCubeX/mihomo/tar.gz/88dcbf7f1614a67c3b36b848ee3592dfa92ada36",
+    "sourceArchiveSha256": "77643ec763a92b330a0b4a44870f78ee05c08792897e7f5e40a3654415c5f077"
+  },
+  {
+    "channel": "alpha",
+    "revision": "94b13aed49b8dc41973e4bb3f721c5fa2c5c5c1f",
+    "ref": "94b13ae",
+    "url": "https://codeload.github.com/MetaCubeX/mihomo/tar.gz/94b13aed49b8dc41973e4bb3f721c5fa2c5c5c1f",
+    "sourceArchiveSha256": "51298bcd0bb377f731ea23ffad119a822896f2524c8dd9f9f4e192219efda5b1"
+  }
+]

@@ -1,0 +1,297 @@
+{
+  "checks": [
+    {
+      "name": "tools renders",
+      "passed": true
+    },
+    {
+      "name": "tools desktop no overflow",
+      "passed": true
+    },
+    {
+      "name": "network renders",
+      "passed": true
+    },
+    {
+      "name": "network desktop no overflow",
+      "passed": true
+    },
+    {
+      "name": "mcp renders",
+      "passed": true
+    },
+    {
+      "name": "mcp desktop no overflow",
+      "passed": true
+    },
+    {
+      "name": "skills renders",
+      "passed": true
+    },
+    {
+      "name": "skills desktop no overflow",
+      "passed": true
+    },
+    {
+      "name": "sessions renders",
+      "passed": true
+    },
+    {
+      "name": "sessions desktop no overflow",
+      "passed": true
+    },
+    {
+      "name": "usage renders",
+      "passed": true
+    },
+    {
+      "name": "usage desktop no overflow",
+      "passed": true
+    },
+    {
+      "name": "projects renders",
+      "passed": true
+    },
+    {
+      "name": "projects desktop no overflow",
+      "passed": true
+    },
+    {
+      "name": "prompts renders",
+      "passed": true
+    },
+    {
+      "name": "prompts desktop no overflow",
+      "passed": true
+    },
+    {
+      "name": "accounts renders",
+      "passed": true
+    },
+    {
+      "name": "accounts desktop no overflow",
+      "passed": true
+    },
+    {
+      "name": "settings renders",
+      "passed": true
+    },
+    {
+      "name": "settings desktop no overflow",
+      "passed": true
+    },
+    {
+      "name": "configuration conflict dialog",
+      "passed": true
+    },
+    {
+      "name": "inline form error",
+      "passed": true
+    },
+    {
+      "name": "provider added",
+      "passed": true
+    },
+    {
+      "name": "unsupported aggregation absent",
+      "passed": true
+    },
+    {
+      "name": "permission denied leaves switch off",
+      "passed": true
+    },
+    {
+      "name": "permission allow updates mock state",
+      "passed": true
+    },
+    {
+      "name": "dark theme applied",
+      "passed": true
+    },
+    {
+      "name": "1024 no overflow",
+      "passed": true
+    },
+    {
+      "name": "overview narrow no page overflow",
+      "passed": true
+    },
+    {
+      "name": "tools narrow no page overflow",
+      "passed": true
+    },
+    {
+      "name": "network narrow no page overflow",
+      "passed": true
+    },
+    {
+      "name": "sessions narrow no page overflow",
+      "passed": true
+    },
+    {
+      "name": "settings narrow no page overflow",
+      "passed": true
+    },
+    {
+      "name": "no runtime errors",
+      "passed": true
+    },
+    {
+      "name": "no external requests",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "externalRequests": [],
+  "screenshots": [
+    "01-overview-light.png",
+    "02-ai-tools.png",
+    "03-network.png",
+    "04-sessions.png",
+    "05-usage.png",
+    "06-import-preview.png",
+    "07-tun-permission.png",
+    "08-config-conflict.png",
+    "09-overview-dark.png",
+    "10-compact-layout.png"
+  ],
+  "scope": "Browser design prototype only; no product/system behavior tested",
+  "designVersion": "0.3",
+  "paletteTextContrastChecks": [
+    {
+      "theme": "light",
+      "foreground": "text",
+      "background": "bg",
+      "ratio": 16.1,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "muted",
+      "background": "card",
+      "ratio": 5.2,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "muted",
+      "background": "soft",
+      "ratio": 4.72,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "accent",
+      "background": "accent-soft",
+      "ratio": 4.52,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "success-emphasis",
+      "background": "success-soft",
+      "ratio": 5.12,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "success-emphasis",
+      "background": "accent-soft",
+      "ratio": 4.77,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "amber",
+      "background": "amber-soft",
+      "ratio": 5.16,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "red",
+      "background": "red-soft",
+      "ratio": 4.55,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "foreground": "primary-text",
+      "background": "accent",
+      "ratio": 5.28,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "text",
+      "background": "bg",
+      "ratio": 15.22,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "muted",
+      "background": "card",
+      "ratio": 6.89,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "muted",
+      "background": "soft",
+      "ratio": 5.72,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "accent",
+      "background": "accent-soft",
+      "ratio": 5.52,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "success-emphasis",
+      "background": "success-soft",
+      "ratio": 6.09,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "success-emphasis",
+      "background": "accent-soft",
+      "ratio": 6.41,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "amber",
+      "background": "amber-soft",
+      "ratio": 6.17,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "red",
+      "background": "red-soft",
+      "ratio": 5.78,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "foreground": "primary-text",
+      "background": "accent",
+      "ratio": 7.44,
+      "passed": true
+    }
+  ],
+  "logoIntegration": {
+    "sidebar": "logo/si-assist-mark.svg",
+    "favicon": "logo/si-assist-app-icon.svg",
+    "visualReview": [
+      "light overview",
+      "brand presentation including light/dark and 24/32/48 px"
+    ],
+    "assetValidation": "logo/asset-validation.json"
+  }
+}

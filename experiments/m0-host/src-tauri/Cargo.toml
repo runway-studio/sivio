@@ -1,0 +1,28 @@
+[package]
+name = "si-assist-m0"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "GPL-3.0-only"
+
+[build-dependencies]
+tauri-build = { version = "=2.7.1", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.1", features = [] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+serde_yaml_ng = "=0.10.0"
+url = "2.5"
+tempfile = "3"
+tokio = { version = "=1.53.2", features = ["process", "time", "io-util"] }
+
+[profile.release]
+debug = 0
+strip = true
+lto = "thin"
+codegen-units = 16
+
+[profile.dev]
+debug = 0
+incremental = false

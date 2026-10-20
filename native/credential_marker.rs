@@ -1,0 +1,1 @@
+pub const MISSING: &str = "__SI_ASSIST_CREDENTIAL_REQUIRED__";

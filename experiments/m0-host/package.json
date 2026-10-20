@@ -1,0 +1,1 @@
+{"name":"si-assist-m0-host","private":true,"version":"0.1.0","packageManager":"pnpm@10.13.1","scripts":{"build":"tauri build --bundles app","dev":"tauri dev"},"devDependencies":{"@tauri-apps/cli":"2.12.1"}}

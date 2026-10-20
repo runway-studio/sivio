@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-16",
+  "scope": "Design prototype only; no production App changes",
+  "browser": "Codex in-app browser",
+  "checks": [
+    {
+      "name": "Three domain navigation and current selection",
+      "result": "pass"
+    },
+    {
+      "name": "Model Codex → Network Nodes → Model Codex → Network Nodes",
+      "result": "pass"
+    },
+    {
+      "name": "Global settings → Return model restores Codex",
+      "result": "pass"
+    },
+    {
+      "name": "Collapsed secondary menu retains accessible global settings",
+      "result": "pass"
+    },
+    {
+      "name": "1280×900 light/dark visual inspection",
+      "result": "pass"
+    },
+    {
+      "name": "960×720 desktop breakpoint",
+      "result": "pass",
+      "documentWidth": 960,
+      "mainWidth": 658,
+      "horizontalOverflow": false
+    },
+    {
+      "name": "Browser back to Network Nodes and forward to Overview",
+      "result": "pass"
+    },
+    {
+      "name": "Console warning/error inspection",
+      "result": "pass",
+      "entries": []
+    }
+  ],
+  "not_verified": [
+    "Production dirty form guard and full editor state persistence",
+    "Native tray/deep links and window recreation",
+    "Network/helper/AI background runtime after navigation refactor",
+    "Intel physical device and real AI account acceptance"
+  ],
+  "previews": [
+    "previews/model.jpg",
+    "previews/network.jpg",
+    "previews/overview.jpg"
+  ]
+}

@@ -1,0 +1,110 @@
+--- a/src/channel.rs
++++ b/src/channel.rs
+@@ -11,21 +11,21 @@
+ #[cfg(not(feature = "development-channel"))]
+ pub const CHANNEL_IDENTITY: ChannelIdentity = ChannelIdentity {
+     id: "production",
+-    service_slug: "clash-verge-service",
++    service_slug: "si-assist-service",
+     windows_service_name: "clash_verge_service",
+-    service_display_name: "Clash Verge Service",
+-    macos_app_bundle_id: "io.github.clash-verge-rev.clash-verge-rev",
+-    macos_service_id: "io.github.clash-verge-rev.clash-verge-rev.service",
++    service_display_name: "SI Assist Service",
++    macos_app_bundle_id: "local.siassist.desktop",
++    macos_service_id: "local.siassist.desktop.service",
+ };
+ 
+ #[cfg(feature = "development-channel")]
+ pub const CHANNEL_IDENTITY: ChannelIdentity = ChannelIdentity {
+     id: "development",
+-    service_slug: "clash-verge-service-dev",
++    service_slug: "si-assist-service-dev",
+     windows_service_name: "clash_verge_service_dev",
+-    service_display_name: "Clash Verge Development Service",
+-    macos_app_bundle_id: "io.github.clash-verge-rev.clash-verge-rev.dev",
+-    macos_service_id: "io.github.clash-verge-rev.clash-verge-rev.dev.service",
++    service_display_name: "SI Assist Development Service",
++    macos_app_bundle_id: "local.siassist.desktop.dev",
++    macos_service_id: "local.siassist.desktop.dev.service",
+ };
+ 
+ pub const SERVICE_SLUG: &str = CHANNEL_IDENTITY.service_slug;
+@@ -41,7 +41,7 @@
+     #[test]
+     fn compiled_channel_has_a_self_consistent_identity() {
+         assert!(!CHANNEL_IDENTITY.id.is_empty());
+-        assert!(CHANNEL_IDENTITY.service_slug.starts_with("clash-verge-service"));
++        assert!(CHANNEL_IDENTITY.service_slug.starts_with("si-assist-service"));
+         assert!(CHANNEL_IDENTITY.windows_service_name.starts_with("clash_verge_service"));
+         assert!(
+             CHANNEL_IDENTITY
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -43,9 +43,9 @@
+ pub use client::*;
+ 
+ #[cfg(all(target_os = "macos", not(feature = "test"), not(feature = "development-channel")))]
+-pub static IPC_PATH: &str = "/var/run/clash-verge-service/service.sock";
++pub static IPC_PATH: &str = "/var/run/si-assist-service/service.sock";
+ #[cfg(all(target_os = "macos", not(feature = "test"), feature = "development-channel"))]
+-pub static IPC_PATH: &str = "/var/run/clash-verge-service-dev/service.sock";
++pub static IPC_PATH: &str = "/var/run/si-assist-service-dev/service.sock";
+ #[cfg(all(
+     unix,
+     not(target_os = "macos"),
+--- a/src/core/paths.rs
++++ b/src/core/paths.rs
+@@ -266,11 +266,11 @@
+     #[cfg(unix)]
+     #[test]
+     fn unix_mihomo_ipc_path_is_owner_scoped_and_below_sun_path_limit() {
+-        let path = unix_mihomo_ipc_path(Path::new("/var/run/clash-verge-service"), 501);
++        let path = unix_mihomo_ipc_path(Path::new("/var/run/si-assist-service"), 501);
+ 
+         assert_eq!(
+             path,
+-            Path::new("/var/run/clash-verge-service/users/501/verge-mihomo.sock")
++            Path::new("/var/run/si-assist-service/users/501/verge-mihomo.sock")
+         );
+         assert!(path.as_os_str().as_encoded_bytes().len() < 104);
+     }
+--- a/src/bin/install_service.rs
++++ b/src/bin/install_service.rs
+@@ -1360,7 +1360,7 @@
+     fn missing_launchd_service_skips_bootout() {
+         let plan = classify_launchd_service_probe(
+             Some(113),
+-            "Could not find service \"io.github.clash-verge-rev.clash-verge-rev.service\" in domain for system",
++            "Could not find service \"local.siassist.desktop.service\" in domain for system",
+         )
+         .unwrap();
+ 
+--- a/src/bin/shared/mod.rs
++++ b/src/bin/shared/mod.rs
+@@ -32,24 +32,7 @@
+ 
+ #[cfg(all(target_os = "macos", not(feature = "development-channel")))]
+ pub fn uninstall_old_service() -> Result<(), Error> {
+-    use std::path::Path;
+-
+-    let target_binary_path = "/Library/PrivilegedHelperTools/io.github.clashverge.helper";
+-    let plist_file = "/Library/LaunchDaemons/io.github.clashverge.helper.plist";
+-
+-    run_command("launchctl", &["stop", "io.github.clashverge.helper"], false)?;
+-    run_command("launchctl", &["bootout", "system", plist_file], false)?;
+-    run_command("launchctl", &["disable", "system/io.github.clashverge.helper"], false)?;
+-
+-    if Path::new(plist_file).exists() {
+-        std::fs::remove_file(plist_file).map_err(|e| anyhow::anyhow!("Failed to remove plist file: {}", e))?;
+-    }
+-
+-    if Path::new(target_binary_path).exists() {
+-        std::fs::remove_file(target_binary_path)
+-            .map_err(|e| anyhow::anyhow!("Failed to remove service binary: {}", e))?;
+-    }
+-
++    // A SI Assist install must never remove another application's helper.
+     Ok(())
+ }
+ 
