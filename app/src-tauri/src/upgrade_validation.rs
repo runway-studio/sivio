@@ -47,12 +47,13 @@ async fn run(app: tauri::AppHandle, report: PathBuf, feed: String) -> Result<()>
     network(&app, "profile.select", json!({"id":profile["id"]})).await?;
     let snapshot = network(&app, "snapshot", json!({})).await?;
     let mut preferences = snapshot["catalog"]["settings"].clone();
-    preferences["system_proxy"] = json!(true);
+    preferences["systemProxy"] = json!(true);
     preferences["tun"] = json!(false);
-    preferences["mixed_port"] = json!(17890);
+    preferences["mixedPort"] = json!(17890);
     network(&app, "settings.save", json!({"settings":preferences,"baseRevision":snapshot["settingsRevision"],"startIfStopped":true})).await?;
     let running = network(&app, "snapshot", json!({})).await?;
     ensure!(running["runtime"]["phase"] == "running", "network did not start");
+    ensure!(running["runtime"]["managed"] == true && running["runtime"]["port"] == 17890 && running["catalog"]["settings"]["systemProxy"] == true, "requested managed proxy settings were not applied");
     record(&report, json!({"stage":"before-upgrade","pid":std::process::id(),"version":app.package_info().version.to_string(),
         "helperAuthorized":running["helperAuthorized"],"runtime":running["runtime"],"profileId":profile["id"]}))?;
 
