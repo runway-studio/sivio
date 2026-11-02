@@ -1,0 +1,5 @@
+{
+  "package": "cargo:alloc-stdlib@0.2.2",
+  "url": "https://raw.githubusercontent.com/dropbox/rust-alloc-no-stdlib/6032b6a9b20e03737135c55a0270ccffcc1438ef/LICENSE",
+  "ref": "6032b6a9b20e03737135c55a0270ccffcc1438ef"
+}

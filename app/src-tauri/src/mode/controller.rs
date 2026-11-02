@@ -713,6 +713,7 @@ pub(crate) async fn lock_settled(
     app: &AppType,
 ) -> Result<OwnedMutexGuard<()>, AppError> {
     let guard = state.proxy_service.lock_switch_for_app(app.as_str()).await;
+    if crate::update_install::installing() { return Err(AppError::Config("UPDATE_BUSY: 正在安装更新".into())); }
     operation::settle(&state.db, app.as_str()).map_err(|error| {
         AppError::localized(
             "mode.unsettled",
@@ -1050,6 +1051,18 @@ pub async fn exit_all(state: &AppState) -> Result<(), String> {
     } else {
         Err(errors.join("；"))
     }
+}
+
+/// Hold every client switch lock until update replacement has finished.
+pub(crate) async fn prepare_update(state: &AppState) -> Result<Vec<OwnedMutexGuard<()>>, String> {
+    let mut guards = Vec::new();
+    for app in PROXY_APPS {
+        guards.push(state.proxy_service.lock_switch_for_app(app.as_str()).await);
+        operation::settle(&state.db, app.as_str()).map_err(|e| e.to_string())?;
+        exit_locked(state, &app, true)?;
+    }
+    if state.proxy_service.is_running().await { state.proxy_service.stop().await.map_err(|e| e.to_string())?; }
+    Ok(guards)
 }
 
 /// 退出 Sivio 时：把接上代理的客户端都指回直连（模式不变，下次启动再接上），再停掉

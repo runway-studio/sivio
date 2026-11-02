@@ -1,0 +1,7 @@
+{
+  "kind": "upstream-later-license",
+  "repository": "rutrum/convert-case",
+  "blobSha": "c0ce8f0a3b7351d84a1420d11a8c045d333870a3",
+  "baselineFileAbsent": true,
+  "note": "Supplemental upstream license text. The packaged baseline declares MIT but omitted its license file; version applicability remains part of release legal review."
+}

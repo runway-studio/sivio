@@ -227,3 +227,9 @@ experiments/  # 早期技术验证，非当前业务应用入口
 - **[Magpie（magpie）](https://github.com/yetone/magpie)**：其统一模型目录、模型选择与本地网关路由设计，为 Sivio 的模型管理体验提供了启发。
 
 同时感谢 [Mihomo](https://github.com/MetaCubeX/mihomo)、[Tauri](https://github.com/tauri-apps/tauri) 以及所有被本项目使用的开源依赖与社区贡献者。
+
+## 版本发布与更新
+
+Sivio 的 GitHub Releases 面向 macOS Apple Silicon，使用稳定内部签名。
+应用内可检查、下载验证并确认安装更新；旧版首次接入需要手动安装带更新能力的版本。
+构建、签名配置、tag 发布及恢复操作见 [版本发布手册](docs/implementation/releases.md)。

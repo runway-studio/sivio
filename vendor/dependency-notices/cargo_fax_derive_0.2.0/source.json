@@ -1,0 +1,7 @@
+{
+  "kind": "upstream-later-license",
+  "repository": "pdf-rs/fax",
+  "blobSha": "16bcf2c47e0a476e50d87d68fa5d84af8b92ff63",
+  "baselineFileAbsent": true,
+  "note": "Supplemental upstream license text. The packaged baseline declares MIT but omitted its license file; version applicability remains part of release legal review."
+}

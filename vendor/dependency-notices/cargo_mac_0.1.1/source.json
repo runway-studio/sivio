@@ -1,0 +1,7 @@
+{
+  "kind": "standard-license-with-source-notice",
+  "licenseChoice": "Apache-2.0",
+  "licenseTextSource": "serde-1.0.228/LICENSE-APACHE",
+  "sourceNotice": "mac-0.1.1/README.md",
+  "note": "Canonical license text plus exact notice from the packaged source; original archive omitted standalone license file."
+}

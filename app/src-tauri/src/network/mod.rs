@@ -1022,6 +1022,14 @@ pub fn reload_preferences() -> Result<()> {
     outbound::configure(&catalog.outbound, if valid.is_ok() { custom } else { None });
     Ok(())
 }
+pub(crate) async fn prepare_update(state: &NetworkState) -> Result<tokio::sync::MutexGuard<'_, ()>> {
+    let guard = state.write.lock().await;
+    stop_inner(&mut *state.runtime.lock().await).await?;
+    Ok(guard)
+}
+pub(crate) async fn resume_after_update_failure(app: &tauri::AppHandle, state: &NetworkState) {
+    service_setup::prepare_on_launch(app, state).await;
+}
 pub async fn shutdown(state: &NetworkState) -> Result<()> {
     stop_inner(&mut *state.runtime.lock().await).await
 }
@@ -1289,6 +1297,7 @@ fn schedule_selection_restore(state: NetworkState, id: String, generation: u64) 
                 // Serialize each choice with manual selection, but yield the
                 // runtime lock between groups so lease renewal is not delayed.
                 let _write = state.write.lock().await;
+                if crate::update_install::installing() { return; }
                 let Ok(latest) = read_catalog() else { return };
                 let Some(node) = latest.selections.get(&id).and_then(|map| map.get(&group)) else {
                     continue;
@@ -1372,6 +1381,7 @@ async fn refresh_profile(
 }
 async fn refresh_profile_route(app: &tauri::AppHandle, state: &NetworkState, id: &str, managed: bool, via: Option<&str>) -> Result<Value> {
     let _write = state.write.lock().await;
+    ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
     let old = read_catalog()?;
     let record = old
         .profiles
@@ -1491,6 +1501,7 @@ pub fn setup(app: &tauri::App) -> Result<()> {
 }
 async fn initialize_preferences(app: &tauri::AppHandle, state: &NetworkState) -> Result<()> {
     let _write = state.write.lock().await;
+    ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
     if state.ready.load(std::sync::atomic::Ordering::Acquire) {
         return Ok(());
     }
@@ -1673,6 +1684,7 @@ async fn shortcut_generation(
         "Network preferences are still loading or unavailable"
     );
     let _write = state.write.lock().await;
+    ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
     if let Some(generation) = expected {
         ensure!(
             state.runtime.lock().await.generation == generation,
@@ -1990,13 +2002,15 @@ async fn execute(
         "app.update.get" => {
             crate::settings::validate_settings_storage()?;
             let settings = crate::settings::get_settings();
-            Ok(json!({"endpoint":settings.update_endpoint,"publicKey":settings.update_public_key}))
+            Ok(serde_json::to_value(crate::update_channel::resolve(&settings).map_err(anyhow::Error::msg)?)?)
         }
         "app.update.save" => {
-            crate::settings::set_update_channel(
+            crate::app_updates::save_channel(
+                app,
                 text(&args, "endpoint")?.into(),
                 text(&args, "publicKey")?.into(),
-            )?;
+                args.get("mode").and_then(Value::as_str).map(String::from),
+            ).await.map_err(anyhow::Error::msg)?;
             Ok(json!({"saved":true}))
         }
         "about.sources" => {
@@ -2100,6 +2114,7 @@ async fn execute(
         }
         "outbound.set" => {
             let _write = state.write.lock().await;
+    ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
             let mode = text(&args, "mode")?;
             let custom = args
                 .get("url")
@@ -2190,6 +2205,7 @@ async fn execute(
         }
         "profile.save" => {
             let _write = state.write.lock().await;
+    ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
             let mut catalog = read_catalog()?;
             let old_catalog = catalog.clone();
             let id = args
@@ -2324,6 +2340,7 @@ async fn execute(
         }
         "profile.reorder" => {
             let _write = state.write.lock().await;
+    ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
             let mut catalog = read_catalog()?;
             let ids: Vec<String> =
                 serde_json::from_value(args.get("ids").context("profile order required")?.clone())?;
@@ -2349,6 +2366,7 @@ async fn execute(
         }
         "profile.delete" => {
             let _write = state.write.lock().await;
+    ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
             let mut catalog = read_catalog()?;
             let id = text(&args, "id")?;
             ensure!(
@@ -2376,6 +2394,7 @@ async fn execute(
         }
         "profile.select" => {
             let _write = state.write.lock().await;
+    ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
             let old = read_catalog()?;
             let mut catalog = old.clone();
             let id = text(&args, "id")?;
@@ -2443,6 +2462,7 @@ async fn execute(
         }
         "start" => {
             let _write = state.write.lock().await;
+    ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
             let result = start(app, state, &read_catalog()?).await?;
             if let Err(error) = service_setup::remember_running(true) {
                 shutdown(state).await?;
@@ -2452,6 +2472,7 @@ async fn execute(
         }
         "stop" => {
             let _write = state.write.lock().await;
+    ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
             let remembered = service_setup::remember_running(false);
             shutdown(state).await?;
             remembered.context("网络已停止，但无法保存下次启动偏好")?;
@@ -2459,6 +2480,7 @@ async fn execute(
         }
         "proxy.reapply" => {
             let _write = state.write.lock().await;
+    ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
             let mut runtime = state.runtime.lock().await;
             ensure!(args.get("expectedGeneration").and_then(Value::as_u64) == Some(runtime.generation), "Network core changed; reload before applying system proxy");
             let settings = read_catalog()?.settings;
@@ -2514,6 +2536,7 @@ async fn execute(
         }
         "helper.install" => {
             let _write = state.write.lock().await;
+    ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
             service_setup::require_current_app().await?;
             // Preparing a service is an explicit user operation. An ordinary
             // warm core can be stopped and restored without touching OS proxy.
@@ -2526,6 +2549,7 @@ async fn execute(
         }
         "helper.uninstall" => {
             let _write = state.write.lock().await;
+    ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
             shutdown(state).await?;
             let status = Command::new(resource(app, "clash-verge-service-uninstall")?)
                 .arg("--prepare-uninstall")

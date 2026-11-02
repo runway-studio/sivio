@@ -375,6 +375,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub update_endpoint: String,
     #[serde(default)]
+    pub update_channel_mode: Option<String>,
+    #[serde(default)]
     pub update_public_key: String,
     // ===== 设备级 UI 设置 =====
     #[serde(default = "default_show_in_tray")]
@@ -585,6 +587,7 @@ impl Default for AppSettings {
             sync_password: String::new(),
             sync_remember_password: false,
             update_endpoint: String::new(),
+            update_channel_mode: None,
             update_public_key: String::new(),
             show_in_tray: true,
             minimize_to_tray_on_close: true,
@@ -1001,6 +1004,7 @@ pub fn update_settings(mut new_settings: AppSettings) -> Result<(), AppError> {
         log::warn!("设置锁已毒化，使用恢复值: {e}");
         e.into_inner()
     });
+    if crate::update_install::installing() { return Err(AppError::Config("UPDATE_BUSY: 正在安装更新".into())); }
     save_settings_file(&new_settings)?;
     remember_sync_session(&new_settings);
     *guard = new_settings;
@@ -1039,6 +1043,7 @@ where
         log::warn!("设置锁已毒化，使用恢复值: {e}");
         e.into_inner()
     });
+    if crate::update_install::installing() { return Err(AppError::Config("UPDATE_BUSY: 正在安装更新".into())); }
     let mut next = guard.clone();
     mutator(&mut next);
     next.normalize_paths();
@@ -1047,12 +1052,18 @@ where
     Ok(())
 }
 
-pub fn set_update_channel(endpoint: String, key: String) -> Result<(), AppError> {
+pub fn set_update_channel(endpoint: String, key: String, mode: Option<String>) -> Result<(), AppError> {
     validate_settings_storage()?;
     let endpoint = endpoint.trim().to_owned();
     let key = key.trim().to_owned();
-    crate::app_updates::validate(&endpoint, &key).map_err(AppError::Config)?;
+    let mode = mode.unwrap_or_else(|| if endpoint.is_empty() && key.is_empty() { "disabled" } else { "custom" }.into());
+    if !["official", "custom", "disabled"].contains(&mode.as_str()) { return Err(AppError::Config("Invalid update mode".into())); }
+    if mode == "custom" {
+        if endpoint.is_empty() || key.is_empty() { return Err(AppError::Config("Incomplete custom update channel".into())); }
+        crate::app_updates::validate(&endpoint, &key).map_err(AppError::Config)?;
+    }
     mutate_settings(|settings| {
+        settings.update_channel_mode = Some(mode);
         settings.update_endpoint = endpoint;
         settings.update_public_key = key;
     })

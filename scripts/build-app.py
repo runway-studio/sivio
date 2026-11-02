@@ -34,12 +34,12 @@ def package_source(output, product, version):
  staging=output/f'.{product}-source-{uuid.uuid4().hex}.tar.gz'
  try:
   with tarfile.open(staging,'w:gz') as archive:
-   for folder in ['app','native','scripts','openspec','docs/implementation','vendor/upstream']:
+   for folder in ['app','native','scripts','openspec','docs','vendor/upstream','vendor/dependency-notices','.github']:
     def include(info):
      excluded={'node_modules','.git','target','dist','resources','__pycache__'}
      return None if excluded.intersection(Path(info.name).parts) else info
-    archive.add(ROOT/folder,arcname=folder,filter=include)
-   for file in ['README.md','LICENSE','.cargo/config.toml','.gitignore']: archive.add(ROOT/file,arcname=file)
+    if (ROOT/folder).exists(): archive.add(ROOT/folder,arcname=folder,filter=include)
+   for file in ['README.md','LICENSE','.cargo/config.toml','.gitignore','build/reports/upstream-manifest.json']: archive.add(ROOT/file,arcname=file)
   digest=hashlib.sha256(staging.read_bytes()).hexdigest()
   destination=output/f'{product}-{version}-source-{digest[:12]}.tar.gz'
   staging.replace(destination)
@@ -68,20 +68,26 @@ def copy_versioned_bundle(source,output):
  shutil.copytree(source,destination,symlinks=True)
  return destination
 def main():
- parser=argparse.ArgumentParser();parser.add_argument('--arch',choices=['aarch64','x86_64'],default='aarch64');parser.add_argument('--skip-helper-build',action='store_true');parser.add_argument('--debug',action='store_true',help='Build an unoptimized development bundle instead of the default release bundle');args=parser.parse_args()
+ parser=argparse.ArgumentParser();parser.add_argument('--arch',choices=['aarch64','x86_64'],default='aarch64');parser.add_argument('--skip-helper-build',action='store_true');parser.add_argument('--release-distribution',action='store_true');parser.add_argument('--debug',action='store_true',help='Build an unoptimized development bundle instead of the default release bundle');args=parser.parse_args()
+
+ if args.release_distribution and (args.debug or args.arch!='aarch64'): raise RuntimeError('Release distribution requires release Apple Silicon build')
+ (ROOT/'build/reports').mkdir(parents=True,exist_ok=True)
  profile='debug' if args.debug else 'release'
  cargo_profile=[] if args.debug else ['--release']
- target=f'{args.arch}-apple-darwin';env=os.environ.copy();env.update(CARGO_HOME=str(ROOT/'build/cache/cargo'),RUSTUP_TOOLCHAIN='1.99.0',MACOSX_DEPLOYMENT_TARGET='12.0',PATH='/usr/bin:/bin:/opt/homebrew/bin:'+env.get('PATH',''))
+ target=f'{args.arch}-apple-darwin'
+ import platform
+ cross=args.arch != ('aarch64' if platform.machine() in ('arm64','aarch64') else 'x86_64')
+ env=os.environ.copy();env.update(CARGO_HOME=str(ROOT/'build/cache/cargo'),RUSTUP_TOOLCHAIN='1.99.0',MACOSX_DEPLOYMENT_TARGET='12.0',PATH='/usr/bin:/bin:/opt/homebrew/bin:'+env.get('PATH',''))
  resources=ROOT/'app/src-tauri/resources';net=resources/'network';legal=resources/'legal';net.mkdir(parents=True,exist_ok=True);legal.mkdir(parents=True,exist_ok=True)
  if not args.skip_helper_build:
-  call(['cargo','build','--manifest-path','native/helper/Cargo.toml','--features','standalone,client','--bins']+cargo_profile+(['--target',target] if args.arch!='aarch64' else []),f'helper-{args.arch}-package.log',env)
- helpers=ROOT/'build/cache/target'/(target if args.arch!='aarch64' else '')/profile
+  call(['cargo','build','--manifest-path','native/helper/Cargo.toml','--features','standalone,client','--bins']+cargo_profile+(['--target',target] if cross else []),f'helper-{args.arch}-package.log',env)
+ helpers=ROOT/'build/cache/target'/(target if cross else '')/profile
  for name in ['clash-verge-service','clash-verge-service-install','clash-verge-service-uninstall','si-helper-control']:
   shutil.copy2(helpers/name,net/name)
   identifier='local.siassist.validation' if name=='si-helper-control' else 'local.siassist.'+name
   subprocess.run(['/usr/bin/codesign','--force','--sign','-','--identifier',identifier,str(net/name)],check=True,capture_output=True)
- call(['cargo','build','--manifest-path','native/supervisor/Cargo.toml']+cargo_profile+(['--target',target] if args.arch!='aarch64' else []),f'supervisor-{args.arch}-package.log',env)
- supervisor=ROOT/'build/cache/target'/(target if args.arch!='aarch64' else '')/profile/'si-network-supervisor'
+ call(['cargo','build','--manifest-path','native/supervisor/Cargo.toml']+cargo_profile+(['--target',target] if cross else []),f'supervisor-{args.arch}-package.log',env)
+ supervisor=ROOT/'build/cache/target'/(target if cross else '')/profile/'si-network-supervisor'
  shutil.copy2(supervisor,net/'si-network-supervisor')
  subprocess.run(['/usr/bin/codesign','--force','--sign','-','--identifier','local.siassist.supervisor',str(net/'si-network-supervisor')],check=True,capture_output=True)
  prepare_core_bundle(net,target)
@@ -95,22 +101,29 @@ def main():
   (legal/name).unlink(missing_ok=True)
  config=json.loads((ROOT/'app/src-tauri/tauri.conf.json').read_text());config['bundle']['resources']={'resources/network/':'network/','resources/legal/':'legal/'}
  (ROOT/'app/src-tauri/tauri.conf.json').write_text(json.dumps(config,ensure_ascii=False,indent=2)+'\n')
- output=ROOT/'dist'/f'internal-{args.arch}'
+ output=ROOT/'dist'/f'{"release" if args.release_distribution else "internal"}-{args.arch}'
  source_archive,source_digest=package_source(output,config['productName'],config['version'])
  (legal/'SOURCE.txt').write_text(f'Corresponding source for this exact Sivio build is supplied separately at the same download location, at no additional charge.\nFile: {source_archive.name}\nSHA256: {source_digest}\nRedistributors must preserve equivalent access to the corresponding source and all license notices.\nThe source archive is not needed to run the App offline.\n',encoding='utf-8')
- call(['pnpm','tauri','build']+(['--debug'] if args.debug else [])+['--features','custom-protocol','--bundles','app']+(['--target',target] if args.arch!='aarch64' else []),f'app-{args.arch}-package.log',env,ROOT/'app')
+ call(['pnpm','tauri','build']+(['--debug'] if args.debug else [])+['--features','custom-protocol','--bundles','app']+(['--target',target] if cross else []),f'app-{args.arch}-package.log',env,ROOT/'app')
  product=config['productName'];version=config['version']
- source=ROOT/'build/cache/target'/(target if args.arch!='aarch64' else '')/profile/'bundle/macos'/f'{product}.app';output=ROOT/'dist'/f'internal-{args.arch}'
+ source=ROOT/'build/cache/target'/(target if cross else '')/profile/'bundle/macos'/f'{product}.app';output=ROOT/'dist'/f'{"release" if args.release_distribution else "internal"}-{args.arch}'
  destination=copy_versioned_bundle(source,output)
  verify_runtime_libraries(destination/'Contents/MacOS/sivio-desktop')
  for name in ['clash-verge-service','clash-verge-service-install','clash-verge-service-uninstall','si-helper-control','si-network-supervisor']:
   verify_runtime_libraries(destination/'Contents/Resources/network'/name)
  signing_spec=importlib.util.spec_from_file_location('sivio_internal_signing',ROOT/'scripts/internal-signing.py')
  signing_module=importlib.util.module_from_spec(signing_spec);signing_spec.loader.exec_module(signing_module)
- signing_info=signing_module.sign(destination,config['identifier'])
+ if args.release_distribution:
+  import sys
+  sys.path.insert(0,str(ROOT/'scripts/release'))
+  from sign import sign_bundle
+  sign_bundle(destination,os.environ['SIVIO_CODESIGN_IDENTITY'],os.environ['SIVIO_CODESIGN_KEYCHAIN'],config['identifier'])
+  signing_info={'kind':'stable-internal','certificateSha1':os.environ['SIVIO_CODESIGN_IDENTITY']}
+ else:
+  signing_info=signing_module.sign(destination,config['identifier'])
  (ROOT/'build/reports'/f'app-{args.arch}-signing-identity.json').write_text(json.dumps(signing_info,indent=2)+'\n')
  call(['/usr/bin/codesign','--verify','--deep','--strict','--verbose=2',str(destination)],f'app-{args.arch}-signature.log',env)
- zip_path=output/f'{product}-{version}-{args.arch}-internal.zip'
+ zip_path=output/(f'{product}-{version}-{args.arch}.zip' if args.release_distribution else f'{product}-{version}-{args.arch}-internal.zip')
  zip_staging=destination.parent/(zip_path.name+'.tmp')
  subprocess.run(['/usr/bin/ditto','-c','-k','--sequesterRsrc','--keepParent',str(destination),str(zip_staging)],check=True)
  zip_staging.replace(zip_path)
@@ -121,5 +134,13 @@ def main():
  report={'app':str(destination.relative_to(ROOT)),'archive':str(zip_path.relative_to(ROOT)),'sha256':hashlib.sha256(zip_path.read_bytes()).hexdigest(),'updaterArtifact':str(update_path.relative_to(ROOT)),'updaterSha256':hashlib.sha256(update_path.read_bytes()).hexdigest(),'updaterSignature':'not-generated; own channel remains unconfigured','architecture':args.arch,'frontendProtocol':'custom-protocol (embedded assets)','frontendEntrySha256':hashlib.sha256((ROOT/'app/dist/index.html').read_bytes()).hexdigest(),'signing':signing_info['kind'],'notarized':False,'fullAcceptance':'not-passed','intelPhysicalAcceptance':'not-passed','builtAt':time.time()}
  report.update(buildProfile=profile,appBytes=sum(p.stat().st_size for p in destination.rglob('*') if p.is_file()),archiveBytes=zip_path.stat().st_size)
  report.update(sourceArchive=str(source_archive.relative_to(ROOT)),sourceSha256=source_digest,coreArchive='network/mihomo-cores.xz')
+ if args.release_distribution:
+  from sign import sign_update
+  from manifest import verify
+  from datetime import datetime,timezone
+  sig=sign_update(update_path,version,ROOT)
+  release_config=json.loads((ROOT/'app/src-tauri/release-config.json').read_text())
+  verify(update_path,sig,release_config['publicKey'])
+  report.update(sourceDirty=bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=normal'],cwd=ROOT)),version=version,sourceSha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),publicKey=release_config['publicKey'],signature=str(sig.relative_to(ROOT)),signatureSha256=hashlib.sha256(sig.read_bytes()).hexdigest(),updaterSignature='verified',pubDate=datetime.now(timezone.utc).isoformat())
  (ROOT/'build/reports'/f'app-{args.arch}-artifact.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n');print(json.dumps(report,ensure_ascii=False,indent=2))
 if __name__=='__main__':main()

@@ -13,6 +13,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import type { UpdateInfo } from "@/lib/updater";
 
 interface DatabaseUpgradeProps {
   payload: {
@@ -45,8 +47,11 @@ interface DownloadProgress {
  *   升级无法解决，及时提醒用户备份后改用兼容客户端或等待官方支持。
  */
 export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const zh = i18n.language.startsWith("zh");
   const [phase, setPhase] = useState<Phase>("checking");
+  const candidateRef = useRef<string | null>(null);
+  const [confirmInstall, setConfirmInstall] = useState(false);
   const [availableVersion, setAvailableVersion] = useState<string | null>(null);
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -60,9 +65,9 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
     let cancelled = false;
     (async () => {
       try {
-        const version = await invoke<string | null>(
-          "check_app_update_available",
-        );
+        const info = await invoke<UpdateInfo | null>("check_app_update_info");
+        const version = info?.availableVersion;
+        candidateRef.current = info?.candidateId ?? null;
         if (cancelled) return;
         if (version) {
           setAvailableVersion(version);
@@ -96,17 +101,29 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
       unlistenRef.current?.();
       unlistenRef.current = await listen<DownloadProgress>(
         "update-download-progress",
-        (e) => setProgress(e.payload),
+        (e) => {
+          if (
+            (e.payload as DownloadProgress & { candidateId: string })
+              .candidateId === candidateRef.current
+          )
+            setProgress(e.payload);
+        },
       );
-      // 成功时后端会下载+安装+重启，不会返回；返回 false 表示无可用更新。
-      const updating = await invoke<boolean>("install_update_and_restart");
+      // Retry checks again so a failed initial check or expired candidate can recover.
+      const info = await invoke<UpdateInfo | null>("check_app_update_info");
+      candidateRef.current = info?.candidateId ?? null;
+      if (!info) {
+        setPhase("incompatible");
+        unlistenRef.current?.();
+        unlistenRef.current = null;
+        return;
+      }
+      setAvailableVersion(info.availableVersion);
+      const candidateId = info.candidateId;
+      await invoke("download_app_update", { candidateId });
       unlistenRef.current?.();
       unlistenRef.current = null;
-      if (!updating) {
-        // 竞态：检查时有更新、安装时已无 → 按不兼容处理
-        setPhase("incompatible");
-      }
-      // updating === true：应用即将重启，保持 updating 态直到进程退出。
+      setConfirmInstall(true);
     } catch (e) {
       unlistenRef.current?.();
       unlistenRef.current = null;
@@ -135,6 +152,29 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface p-6 text-fg-1">
+      <ConfirmDialog
+        isOpen={confirmInstall}
+        variant="info"
+        title={zh ? "安装更新并重启？" : "Install and restart?"}
+        message={
+          zh
+            ? "更新包已验证。安装将短暂中断网络并重启 Sivio，保留已有数据。"
+            : "The verified update will restart Sivio and briefly pause networking. Your data is retained."
+        }
+        onCancel={() => {
+          setConfirmInstall(false);
+          setPhase("upgradable");
+        }}
+        onConfirm={() => {
+          setConfirmInstall(false);
+          void invoke("install_update_and_restart", {
+            candidateId: candidateRef.current,
+          }).catch((error) => {
+            setErrorMsg(String(error));
+            setPhase("error");
+          });
+        }}
+      />
       <div className="w-full max-w-lg space-y-5 rounded-2xl border border-border/60 bg-surface p-7 shadow-xl">
         <div className="flex items-start gap-4">
           <div

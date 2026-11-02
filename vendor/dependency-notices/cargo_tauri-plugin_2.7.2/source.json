@@ -1,0 +1,7 @@
+{
+  "package": "cargo:tauri-plugin@2.7.2",
+  "repository": "https://github.com/tauri-apps/tauri",
+  "ref": "59b63ab500da9859f12d8888c3298bc29bba0b92",
+  "noticeSource": "LICENSE-MIT shipped in tauri-macros 2.7.3 from the same workspace commit",
+  "licenseChoice": "MIT"
+}

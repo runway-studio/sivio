@@ -755,6 +755,23 @@ function App() {
     },
   );
 
+  useEffect(() => {
+    const onInstall = (event: Event) => {
+      if (navigationBusy()) {
+        toast.info(t("desktop.quitBusy", { defaultValue: "操作进行中，完成后可更新" }));
+        return;
+      }
+      const proceed = (event as CustomEvent<() => void>).detail;
+      const guarded = () => {
+        if (navigationBusy()) return;
+        proceed();
+      };
+      if (!confirmLeave(guarded)) guarded();
+    };
+    window.addEventListener("sivio-install-update-request", onInstall);
+    return () => window.removeEventListener("sivio-install-update-request", onInstall);
+  });
+
   useTauriEvent("desktop-quit-requested", () => {
     if (navigationBusy()) {
       toast.info(

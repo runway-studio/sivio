@@ -1,154 +1,221 @@
 import React, {
   createContext,
-  useContext,
-  useState,
-  useEffect,
   useCallback,
+  useContext,
+  useEffect,
   useRef,
+  useState,
 } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { useDesktopPreferences } from "@/lib/desktopPreferences";
-import type { UpdateInfo } from "../lib/updater";
-import { checkForUpdate } from "../lib/updater";
-import { extractErrorMessage } from "../utils/errorUtils";
+import {
+  checkForUpdate,
+  type UpdateInfo,
+  type UpdateProgress,
+} from "@/lib/updater";
+import { settingsApi } from "@/lib/api";
+import { extractErrorMessage } from "@/utils/errorUtils";
 
+export type UpdateStage =
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "verifying"
+  | "ready"
+  | "installing"
+  | "restarting"
+  | "error";
 interface UpdateContextValue {
-  // 更新状态
   hasUpdate: boolean;
   updateInfo: UpdateInfo | null;
   isChecking: boolean;
   error: string | null;
-
-  // 提示状态
   isDismissed: boolean;
+  stage: UpdateStage;
+  progress: UpdateProgress | null;
   dismissUpdate: () => void;
-
-  // 操作方法
-  checkUpdate: () => Promise<boolean>;
   resetDismiss: () => void;
+  resetUpdate: () => void;
+  checkUpdate: () => Promise<boolean>;
+  downloadUpdate: () => Promise<void>;
+  cancelUpdate: () => Promise<void>;
+  installUpdate: () => void;
 }
-
 const UpdateContext = createContext<UpdateContextValue | undefined>(undefined);
-
+const DISMISSED = "sivio:update:dismissedVersion";
+function dismissedVersion() {
+  const current = localStorage.getItem(DISMISSED);
+  if (current) return current;
+  const old =
+    localStorage.getItem("ccswitch:update:dismissedVersion") ??
+    localStorage.getItem("dismissedUpdateVersion");
+  if (old) localStorage.setItem(DISMISSED, old);
+  return old;
+}
 export function UpdateProvider({ children }: { children: React.ReactNode }) {
   const desktop = useDesktopPreferences();
-  const DISMISSED_VERSION_KEY = "ccswitch:update:dismissedVersion";
-  const LEGACY_DISMISSED_KEY = "dismissedUpdateVersion"; // 兼容旧键
-
-  const [hasUpdate, setHasUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [isChecking, setIsChecking] = useState(false);
+  const [stage, setStage] = useState<UpdateStage>("idle");
+  const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDismissed, setIsDismissed] = useState(false);
-
-  // 从 localStorage 读取已关闭的版本
-  useEffect(() => {
-    const current = updateInfo?.availableVersion;
-    if (!current) return;
-
-    // 读取新键；若不存在，尝试迁移旧键
-    let dismissedVersion = localStorage.getItem(DISMISSED_VERSION_KEY);
-    if (!dismissedVersion) {
-      const legacy = localStorage.getItem(LEGACY_DISMISSED_KEY);
-      if (legacy) {
-        localStorage.setItem(DISMISSED_VERSION_KEY, legacy);
-        localStorage.removeItem(LEGACY_DISMISSED_KEY);
-        dismissedVersion = legacy;
-      }
-    }
-
-    setIsDismissed(dismissedVersion === current);
-  }, [updateInfo?.availableVersion]);
-
-  const isCheckingRef = useRef(false);
-
-  const checkUpdate = useCallback(async () => {
-    if (isCheckingRef.current) return false;
-    isCheckingRef.current = true;
-    setIsChecking(true);
+  const epoch = useRef(0);
+  const busy = useRef(false);
+  const candidate = useRef<UpdateInfo | null>(null);
+  const resetUpdate = useCallback(() => {
+    epoch.current++;
+    candidate.current = null;
+    setUpdateInfo(null);
+    setStage("idle");
+    setProgress(null);
     setError(null);
-
-    try {
-      const result = await checkForUpdate({ timeout: 30000 });
-
-      if (result.status === "available") {
-        setHasUpdate(true);
-        setUpdateInfo(result.info);
-
-        // 检查是否已经关闭过这个版本的提醒
-        let dismissedVersion = localStorage.getItem(DISMISSED_VERSION_KEY);
-        if (!dismissedVersion) {
-          const legacy = localStorage.getItem(LEGACY_DISMISSED_KEY);
-          if (legacy) {
-            localStorage.setItem(DISMISSED_VERSION_KEY, legacy);
-            localStorage.removeItem(LEGACY_DISMISSED_KEY);
-            dismissedVersion = legacy;
-          }
-        }
-        setIsDismissed(dismissedVersion === result.info.availableVersion);
-        return true; // 有更新
-      } else {
-        setHasUpdate(false);
-        setUpdateInfo(null);
-        setIsDismissed(false);
-        return false; // 已是最新
-      }
-    } catch (err) {
-      console.error("检查更新失败:", err);
-      setError(extractErrorMessage(err) || "检查更新失败");
-      setHasUpdate(false);
-      throw err; // 抛出错误让调用方处理
-    } finally {
-      setIsChecking(false);
-      isCheckingRef.current = false;
-    }
-  }, []);
-
-  const dismissUpdate = useCallback(() => {
-    setIsDismissed(true);
-    if (updateInfo?.availableVersion) {
-      localStorage.setItem(DISMISSED_VERSION_KEY, updateInfo.availableVersion);
-      // 清理旧键
-      localStorage.removeItem(LEGACY_DISMISSED_KEY);
-    }
-  }, [updateInfo?.availableVersion]);
-
-  const resetDismiss = useCallback(() => {
     setIsDismissed(false);
-    localStorage.removeItem(DISMISSED_VERSION_KEY);
-    localStorage.removeItem(LEGACY_DISMISSED_KEY);
   }, []);
-
-  // 应用启动时自动检查更新
+  const fail = (error: unknown) => {
+    setError(extractErrorMessage(error) || String(error));
+    setStage("error");
+  };
+  const checkUpdate = useCallback(async () => {
+    if (busy.current) throw new Error("UPDATE_BUSY: 更新正在进行");
+    busy.current = true;
+    const revision = ++epoch.current;
+    setStage("checking");
+    setError(null);
+    try {
+      const result = await checkForUpdate();
+      if (revision !== epoch.current)
+        throw new Error("UPDATE_STALE: 更新源已改变，请重新检查");
+      const info = result.status === "available" ? result.info : null;
+      candidate.current = info;
+      setUpdateInfo(info);
+      setProgress(null);
+      setStage(info ? "available" : "idle");
+      setIsDismissed(!!info && dismissedVersion() === info.availableVersion);
+      return !!info;
+    } catch (error) {
+      if (revision === epoch.current) {
+        candidate.current = null;
+        setUpdateInfo(null);
+        fail(error);
+      }
+      throw error;
+    } finally {
+      busy.current = false;
+    }
+  }, []);
+  useEffect(() => {
+    let disposed = false;
+    const cleaners: (() => void)[] = [];
+    const add = (fn: () => void) => (disposed ? fn() : cleaners.push(fn));
+    void listen<UpdateProgress>("update-download-progress", ({ payload }) => {
+      if (payload.candidateId !== candidate.current?.candidateId) return;
+      setProgress(payload);
+      setStage(payload.stage);
+    })
+      .then(add)
+      .catch(() => {});
+    void listen("update-channel-changed", resetUpdate)
+      .then(add)
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      cleaners.forEach((fn) => fn());
+    };
+  }, [resetUpdate]);
+  const downloadUpdate = async () => {
+    const info = candidate.current;
+    if (!info || busy.current) return;
+    busy.current = true;
+    const revision = epoch.current;
+    setStage("downloading");
+    setError(null);
+    setProgress(null);
+    try {
+      await settingsApi.downloadAppUpdate(info.candidateId);
+      if (revision === epoch.current) setStage("ready");
+    } catch (error) {
+      if (revision === epoch.current) fail(error);
+    } finally {
+      busy.current = false;
+    }
+  };
+  const cancelUpdate = async () => {
+    const info = candidate.current;
+    if (!info) return;
+    try {
+      await settingsApi.cancelAppUpdate(info.candidateId);
+      resetUpdate();
+    } catch (error) {
+      fail(error);
+    }
+  };
+  const installUpdate = () => {
+    const info = candidate.current;
+    if (!info || stage !== "ready" || busy.current) return;
+    const proceed = () => {
+      if (candidate.current?.candidateId !== info.candidateId || busy.current)
+        return;
+      busy.current = true;
+      setStage("installing");
+      setError(null);
+      void settingsApi
+        .installUpdateAndRestart(info.candidateId)
+        .catch(fail)
+        .finally(() => {
+          busy.current = false;
+        });
+    };
+    // App owns the shared unsaved-draft and in-flight-operation gate.
+    window.dispatchEvent(
+      new CustomEvent("sivio-install-update-request", { detail: proceed }),
+    );
+  };
+  const dismissUpdate = () => {
+    setIsDismissed(true);
+    if (updateInfo)
+      localStorage.setItem(DISMISSED, updateInfo.availableVersion);
+  };
+  const resetDismiss = () => {
+    setIsDismissed(false);
+    [
+      DISMISSED,
+      "ccswitch:update:dismissedVersion",
+      "dismissedUpdateVersion",
+    ].forEach((key) => localStorage.removeItem(key));
+  };
   useEffect(() => {
     if (!desktop.data?.preferences.autoCheckUpdate) return;
-    // 延迟1秒后检查，避免影响启动体验
     const timer = setTimeout(() => {
-      checkUpdate().catch(console.error);
+      void checkUpdate().catch(() => {});
     }, 1000);
-
     return () => clearTimeout(timer);
   }, [checkUpdate, desktop.data?.preferences.autoCheckUpdate]);
-
-  const value: UpdateContextValue = {
-    hasUpdate,
-    updateInfo,
-    isChecking,
-    error,
-    isDismissed,
-    dismissUpdate,
-    checkUpdate,
-    resetDismiss,
-  };
-
   return (
-    <UpdateContext.Provider value={value}>{children}</UpdateContext.Provider>
+    <UpdateContext.Provider
+      value={{
+        hasUpdate: !!updateInfo,
+        updateInfo,
+        stage,
+        progress,
+        error,
+        isChecking: stage === "checking",
+        isDismissed,
+        dismissUpdate,
+        resetDismiss,
+        resetUpdate,
+        checkUpdate,
+        downloadUpdate,
+        cancelUpdate,
+        installUpdate,
+      }}
+    >
+      {children}
+    </UpdateContext.Provider>
   );
 }
-
 export function useUpdate() {
   const context = useContext(UpdateContext);
-  if (!context) {
-    throw new Error("useUpdate must be used within UpdateProvider");
-  }
+  if (!context) throw new Error("useUpdate must be used within UpdateProvider");
   return context;
 }

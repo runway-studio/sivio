@@ -43,6 +43,7 @@ fn merge_settings_for_save(
     incoming.sync_password = existing.sync_password.clone();
     incoming.sync_include_secrets = existing.sync_include_secrets;
     incoming.sync_remember_password = existing.sync_remember_password;
+    incoming.update_channel_mode = existing.update_channel_mode.clone();
     incoming.update_endpoint = existing.update_endpoint.clone();
     incoming.update_public_key = existing.update_public_key.clone();
     // 客户端地址只经 set_proxy_client_host 保存（它还要重写客户端）；全量保存带的是前端
@@ -256,45 +257,16 @@ pub async fn restart_app(app: AppHandle) -> Result<bool, String> {
 /// `process.relaunch()`，旧进程可能已经处在 bundle 被替换后的不稳定窗口期。
 /// 这里把退出清理、安装和重启串在同一个后端流程中，避免依赖旧前端继续执行。
 #[tauri::command]
-pub async fn install_update_and_restart(app: AppHandle) -> Result<bool, String> {
-    let Some(checked) = crate::app_updates::check(&app).await? else {
-        return Ok(false);
-    };
-    let bytes = crate::app_updates::download(&app, &checked).await?;
-    let update = checked.update;
-    #[cfg(target_os = "windows")]
-    {
-        // Windows updater 会在 install() 内启动安装器并直接退出当前进程
-        // （插件内部 std::process::exit(0)，绕过 TrayIcon::drop、不发
-        // NIM_DELETE，会残留死图标——与托盘"退出"路径相同的问题）。
-        // 因此清理只能放在 install 前执行，且必须显式移除托盘图标。
-        crate::save_window_state_before_exit(&app);
-        crate::cleanup_before_exit(&app).await;
-        crate::remove_tray_icon_before_exit(&app);
-        crate::destroy_single_instance_lock(&app);
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        update.install(bytes).map_err(|e| {
-            format!(
-                "Windows 更新安装失败: {e}。已执行退出前清理，代理或 Live 接管可能已暂停；请重启应用或重新开启代理后再试。"
-            )
-        })?;
-        Ok(true)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        // macOS/Linux install() 会返回；先安装，避免安装失败时误停代理/撤回接管。
-        update
-            .install(bytes)
-            .map_err(|e| format!("安装更新失败: {e}"))?;
-
-        crate::save_window_state_before_exit(&app);
-        crate::cleanup_before_exit(&app).await;
-
-        log::info!("应用更新安装完成，正在重启应用");
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        crate::restart_process(&app);
-    }
+pub async fn install_update_and_restart(app: AppHandle, candidate_id: String) -> Result<bool, String> {
+    crate::app_updates::install(&app, &candidate_id).await
+}
+#[tauri::command]
+pub async fn download_app_update(app: AppHandle, candidate_id: String) -> Result<(), String> {
+    crate::app_updates::download_candidate(&app, &candidate_id).await
+}
+#[tauri::command]
+pub async fn cancel_app_update(candidate_id: String) -> Result<(), String> {
+    crate::app_updates::cancel(&candidate_id)
 }
 
 /// 检查是否有可用的应用更新，返回可用的新版本号（无更新时返回 None）。

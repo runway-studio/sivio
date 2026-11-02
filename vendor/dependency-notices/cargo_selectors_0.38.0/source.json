@@ -1,0 +1,7 @@
+{
+  "kind": "standard-license-with-source-notice",
+  "licenseChoice": "MPL-2.0",
+  "licenseTextSource": "option-ext-0.2.0/LICENSE.txt",
+  "sourceNotice": "selectors-0.38.0/lib.rs",
+  "note": "Canonical license text plus exact notice from the packaged source; original archive omitted standalone license file."
+}

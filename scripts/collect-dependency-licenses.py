@@ -19,7 +19,8 @@ def main():
         if license_file:
             extra=path/license_file
             if extra.is_file() and extra not in files:files.append(extra)
-        cached=ROOT/'build/cache/dependency-notices'/folder
+        cached=ROOT/'vendor/dependency-notices'/folder
+        if not cached.is_dir():cached=ROOT/'build/cache/dependency-notices'/folder
         if cached.is_dir():files += [p for p in cached.iterdir() if p.is_file() and p.name!='source.json']
         if not files and path.is_relative_to(ROOT) and license_name=='GPL-3.0-only':files=[ROOT/'LICENSE']
         notices=[]

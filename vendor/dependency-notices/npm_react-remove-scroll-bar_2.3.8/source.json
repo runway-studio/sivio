@@ -1,0 +1,7 @@
+{
+  "kind": "upstream-later-license",
+  "repository": "theKashey/react-remove-scroll-bar",
+  "blobSha": "7c08c3990396ecefd90f99ff5d9a34f26f5b5616",
+  "baselineFileAbsent": true,
+  "note": "Supplemental upstream license text. The packaged baseline declares MIT but omitted its license file; version applicability remains part of release legal review."
+}

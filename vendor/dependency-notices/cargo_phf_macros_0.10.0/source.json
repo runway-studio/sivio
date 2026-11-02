@@ -1,0 +1,5 @@
+{
+  "package": "cargo:phf_macros@0.10.0",
+  "url": "https://raw.githubusercontent.com/sfackler/rust-phf/3cc6f05cb07933af4cf886645d1170bdcb306b6b/LICENSE",
+  "ref": "3cc6f05cb07933af4cf886645d1170bdcb306b6b"
+}

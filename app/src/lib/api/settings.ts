@@ -73,8 +73,14 @@ export const settingsApi = {
     return await invoke("restart_app");
   },
 
-  async installUpdateAndRestart(): Promise<boolean> {
-    return await invoke("install_update_and_restart");
+  async installUpdateAndRestart(candidateId: string): Promise<boolean> {
+    return await invoke("install_update_and_restart", { candidateId });
+  },
+  async downloadAppUpdate(candidateId: string): Promise<void> {
+    await invoke("download_app_update", { candidateId });
+  },
+  async cancelAppUpdate(candidateId: string): Promise<void> {
+    await invoke("cancel_app_update", { candidateId });
   },
 
   async checkUpdates(): Promise<void> {

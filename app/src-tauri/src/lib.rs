@@ -52,6 +52,9 @@ mod private_storage;
 mod portable_credentials;
 mod backup_crypto;
 mod app_updates;
+mod update_signature;
+mod update_channel;
+mod update_install;
 mod services;
 mod session_manager;
 mod settings;
@@ -1486,7 +1489,12 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(|invoke: tauri::ipc::Invoke<tauri::Wry>| {
+            if update_install::installing() {
+                invoke.resolver.reject("UPDATE_BUSY: 应用正在安装更新，请稍后重试");
+                return true;
+            }
+            let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
             credential_migration::credential_migration_status,
             credential_migration::migrate_legacy_credentials,
             credential_migration::cancel_credential_migration,
@@ -1543,6 +1551,8 @@ pub fn run() {
             commands::set_log_config,
             commands::restart_app,
             commands::install_update_and_restart,
+            commands::download_app_update,
+            commands::cancel_app_update,
             commands::check_app_update_available,
             commands::check_app_update_info,
             commands::check_for_updates,
@@ -1889,7 +1899,9 @@ pub fn run() {
             commands::enter_lightweight_mode,
             commands::exit_lightweight_mode,
             commands::is_lightweight_mode,
-        ]);
+        ];
+            handler(invoke)
+        });
 
     let app = builder
         .build(tauri::generate_context!())
