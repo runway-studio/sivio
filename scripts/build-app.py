@@ -34,7 +34,7 @@ def package_source(output, product, version):
  staging=output/f'.{product}-source-{uuid.uuid4().hex}.tar.gz'
  try:
   with tarfile.open(staging,'w:gz') as archive:
-   for folder in ['app','native','scripts','openspec','docs','vendor/upstream','vendor/dependency-notices','.github']:
+   for folder in ['app','native','scripts','openspec','docs','vendor/upstream','vendor/dependency-notices','vendor/cores','.github']:
     def include(info):
      excluded={'node_modules','.git','target','dist','resources','__pycache__'}
      return None if excluded.intersection(Path(info.name).parts) else info

@@ -13,17 +13,25 @@ root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument('--arch', choices=['aarch64-apple-darwin','x86_64-apple-darwin'], required=True)
 parser.add_argument('--channel', choices=['stable','alpha'], default='stable')
+parser.add_argument('--cache-root', type=Path, default=root/'build/cache/mihomo')
 args = parser.parse_args()
 manifest = json.loads((root/'build/reports/upstream-manifest.json').read_text())
 asset = next(x for x in manifest['kernels'] if x['architecture']==args.arch and x['channel']==args.channel)
 expected = asset['sha256']
 if not expected or not expected.startswith('sha256:'): raise SystemExit('Pinned digest is required')
-cache = root/'build/cache/mihomo'/args.arch/args.channel
+cache = args.cache_root/args.arch/args.channel
 cache.mkdir(parents=True, exist_ok=True)
 archive = cache/asset['filename']
 if not archive.exists() or hashlib.sha256(archive.read_bytes()).hexdigest()!=expected[7:]:
-    request = urllib.request.Request(asset['url'], headers={'User-Agent':'Sivio-build'})
-    with urllib.request.urlopen(request, timeout=60) as source, tempfile.NamedTemporaryFile(dir=cache,delete=False) as out:
+    if asset.get('vendoredPath'):
+        pinned = (root/asset['vendoredPath']).resolve()
+        if not pinned.is_relative_to(root/'vendor/cores'):
+            raise ValueError('Vendored artifact must be inside vendor/cores')
+        source = pinned.open('rb')
+    else:
+        request = urllib.request.Request(asset['url'], headers={'User-Agent':'Sivio-build'})
+        source = urllib.request.urlopen(request, timeout=60)
+    with source, tempfile.NamedTemporaryFile(dir=cache,delete=False) as out:
         temp = Path(out.name)
         try:
             digest = hashlib.sha256(); total=0

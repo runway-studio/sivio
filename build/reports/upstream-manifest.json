@@ -2550,7 +2550,8 @@
       "sha256": "sha256:7fd6e91cfd8d705b8850b265251cef246f438a4925bacf6359aa0c714e48bbb2",
       "size": 20872163,
       "verification": "publisher API metadata only; binary not downloaded or verified",
-      "mutableRelease": true
+      "mutableRelease": true,
+      "vendoredPath": "vendor/cores/mihomo-darwin-arm64-go122-alpha-94b13ae.gz"
     }
   ],
   "openItems": [

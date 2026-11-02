@@ -23,7 +23,7 @@ class ReleaseBuild(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in ['app/src/main.ts', 'app/node_modules/private', 'app/src-tauri/resources/private', 'native/target/private',
-                         'scripts/build-app.py', 'openspec/project.md', 'docs/implementation/notices.md', 'vendor/upstream/LICENSE', 'vendor/dependency-notices/pkg/LICENSE',
+                         'scripts/build-app.py', 'openspec/project.md', 'docs/implementation/notices.md', 'vendor/upstream/LICENSE', 'vendor/dependency-notices/pkg/LICENSE', 'vendor/cores/pinned.gz',
                          '.github/workflows/release.yml', 'README.md', 'LICENSE', '.cargo/config.toml', '.gitignore', 'build/reports/upstream-manifest.json']:
                 file = root / name
                 file.parent.mkdir(parents=True, exist_ok=True)
@@ -35,4 +35,5 @@ class ReleaseBuild(unittest.TestCase):
             self.assertIn('.github/workflows/release.yml', names)
             self.assertIn('build/reports/upstream-manifest.json', names)
             self.assertIn('vendor/dependency-notices/pkg/LICENSE', names)
+            self.assertIn('vendor/cores/pinned.gz', names)
             self.assertFalse(any('private' in name for name in names))
