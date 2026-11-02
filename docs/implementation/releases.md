@@ -66,7 +66,7 @@ git push origin v0.2.0
 
 ## 当前交付边界
 
-代码与本地测试不等于 GitHub CI/原生升级验收。实际进度见 `openspec/changes/add-github-releases-and-app-updates/acceptance.md`。发布前仍需验证干净 runner、匿名资源访问、隔离 N→N+1、同签名 helper 行为；未执行项目保持 NOT_VERIFIED。
+当前 `v0.1.1` 已通过干净 runner 构建、最终签名与匿名资产回读。隔离原生 `0.1.0` 测试宿主 → `0.1.1-rc.2` 已验证真实安装重启、数据保留和同签名 helper 下的系统代理恢复。具体证据见 `openspec/changes/add-github-releases-and-app-updates/acceptance.md`；TUN、Intel 与 UI 点击不在这次原生验收覆盖内。
 
 ## 发布隐私检查与原生升级验收
 

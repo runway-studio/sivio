@@ -37,8 +37,8 @@ Files: ignored `build/privacy-cleanup/` manifests and rollback backup; no raw ex
 - [x] Read remote refs/releases/runs and record exact expected SHAs and affected immutable artifacts.
 - [x] Create private local rollback bundle, then rewrite a disposable mirror: replace only the known internal registry host/personal path, replace this project's author/committer email with GitHub noreply, preserve commit structure.
 - [x] Scan rewritten reachable history and review ref mapping and exact source changes.
-- [ ] Present the concrete history/tag/old-Release replacement plan before force-pushing or deleting assets; these actions invalidate old commit references/checksums and require explicit confirmation.
-- [ ] After approval use leases/expected SHAs, update source-linked assets consistently, remove obsolete public artifacts containing old source, and verify anonymous downloads. State any provider-cached/unreachable copies requiring GitHub support.
+- [x] Present the concrete history/tag/old-Release replacement plan before force-pushing or deleting assets; these actions invalidate old commit references/checksums and require explicit confirmation.
+- [x] After approval use leases/expected SHAs, update source-linked assets consistently, remove obsolete public artifacts containing old source, and verify anonymous downloads. State any provider-cached/unreachable copies requiring GitHub support.
 
 ## Task 4: Real native upgrade with isolated test state
 

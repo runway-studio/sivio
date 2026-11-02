@@ -2,7 +2,7 @@
 
 ## Privacy cleanup and native upgrade follow-up
 
-The sections below this follow-up preserve the initial-release evidence. Their original NOT_VERIFIED native-upgrade status is superseded by the successful run here; old release/CI downloads are pending retirement after the clean stable replacement is verified.
+The sections below this follow-up preserve the initial-release evidence. Their original NOT_VERIFIED native-upgrade status is superseded by the successful run here; the eight old Release attachments and six old CI runs (including three artifacts) have been retired after explicit approval and verification of the clean stable replacement. Links to those original runs below are historical and no longer resolve.
 
 - With explicit owner approval and a private local rollback bundle, ten commits were rewritten to remove internal npm mirror references, one personal absolute path and corporate author/committer emails. The affected packages were independently matched to public npm SHA512 integrities. Remote `main` and `v0.1.0` now use scanned history. Old SHA objects may remain retrievable through GitHub caches; this does not claim server-side erasure or deletion from other clones.
 - Source/history and recursive release-archive privacy gates passed. Source packaging admits only tracked build inputs and normalizes archive ownership. Exact path/hash/rule exceptions cover reviewed public upstream fixtures and scanner definitions. **15 release-script tests passed**, including rejection/redaction, modified exceptions and nested archives. The native validation feature also passed Rust compilation; OpenSpec strict and workflow syntax checks passed.
@@ -13,6 +13,20 @@ The sections below this follow-up preserve the initial-release evidence. Their o
 - Durable, synthetic-only evidence: [native-upgrade JSON](../../../docs/releases/validation/v0.1.1-rc.2-native.json). No production credentials or user data were used. Test-host builds cannot pass the formal release manifest gate.
 
 Limits: TUN, Intel, UI clicking and unsaved-edit prompts were not driven by this native run; prior targeted UI tests are separate evidence. Static scanning cannot prove absence of every unknown secret format. No live signing credential was found in the audited public assets; private signing material remains outside the distribution.
+
+## Clean stable replacement published
+
+[Sivio v0.1.1](https://github.com/runway-studio/sivio/releases/tag/v0.1.1) is public, non-draft, non-prerelease and selected by the official latest feed. Its tag is exactly the validated candidate `24d07400d6b021b2bb0022d0d61940ff05cab3d8`, built in [run 41432711766](https://github.com/runway-studio/sivio/actions/runs/41432711766). The tested RC and stable candidate have identical production behavior; differences are product version, release notes and corrections to the excluded validation harness.
+
+The eight CI-generated files were downloaded locally, privacy-scanned, hash-checked, verified with the production updater verifier, and checked for matching embedded source metadata. The extracted installer passed deep/strict macOS signature verification against the original certificate identity. These same files were uploaded without rebuilding, and every public file was anonymously downloaded and hash-checked; the official latest manifest matched the local manifest exactly.
+
+| Stable asset | SHA256 |
+|---|---|
+| `Sivio-0.1.1-aarch64.zip` | `e36d1b5c1d8048825521590ce13c654852bcc66cdfeee36ba599529bb370e33d` |
+| `Sivio-0.1.1-aarch64.app.tar.gz` | `77ce4ba656e90fe6f02dc72d094e6688af1da2466ba4651133c2d59f1978c878` |
+| `Sivio-0.1.1-source-d800741d5d47.tar.gz` | `d800741d5d470306a07145e7d64f8bd96204685cadbdfa161e934fef6d14bde4` |
+
+Only after successful publication/readback, the explicitly approved legacy eight Release attachments and six CI runs/three artifacts were deleted. API readback confirms removal; the old source download returns HTTP 404. The v0.1.0 Release page now directs users to v0.1.1. Verified rollback copies and ref mappings remain in private ignored local storage. GitHub may still retain unreachable old commit objects/cached views; an optional support-request draft is prepared locally and has not been sent.
 
 ## Implemented and locally verified
 

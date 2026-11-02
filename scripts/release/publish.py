@@ -151,7 +151,8 @@ def main():
         if latest and not prerelease:
             github.api('/releases/' + str(latest['id']), 'PATCH', {'make_latest': 'true'})
         raise RuntimeError('Publication readback failed; previous latest restored where available. Inspect the release before distribution.') from None
-    print('Published and anonymously verified: ' + uploaded['html_url'])
+    # Draft URLs may use an untagged slug; report the final published URL.
+    print('Published and anonymously verified: ' + github.api(release_path)['html_url'])
 
 
 if __name__ == '__main__':
