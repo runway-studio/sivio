@@ -16,8 +16,8 @@ import { settingsApi } from "@/lib/api";
 import { markSeen } from "@/lib/whatsNew";
 
 /** 首次运行欢迎提示：仅当后端启动阶段保留 firstRunNoticeConfirmed 为空时弹出。 */
-export function FirstRunNoticeDialog() {
-  const { t } = useTranslation();
+export function FirstRunNoticeDialog({ onSetup }: { onSetup?: () => void }) {
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const { data: settings } = useSettingsQuery();
 
@@ -25,7 +25,7 @@ export function FirstRunNoticeDialog() {
   // 所以前端这里只需要判空即可——与其他既有确认标记的模式一致。
   const isOpen = settings != null && settings.firstRunNoticeConfirmed !== true;
 
-  const handleAcknowledge = async () => {
+  const handleAcknowledge = async (setup = false) => {
     if (!settings) return;
     try {
       const { webdavSync: _, ...rest } = settings;
@@ -38,6 +38,7 @@ export function FirstRunNoticeDialog() {
         whatsNewSeenVersion: markSeen(settings.whatsNewSeenVersion, version),
       });
       await queryClient.invalidateQueries({ queryKey: ["settings"] });
+      if (setup) onSetup?.();
     } catch (error) {
       console.error("Failed to save firstRunNoticeConfirmed:", error);
     }
@@ -66,7 +67,15 @@ export function FirstRunNoticeDialog() {
           </DialogDescription>
         </div>
         <DialogFooter>
-          <Button onClick={handleAcknowledge}>
+          {onSetup && (
+            <Button
+              variant="outline"
+              onClick={() => void handleAcknowledge(true)}
+            >
+              {i18n.language.startsWith("zh") ? "开始接入" : "Set up a client"}
+            </Button>
+          )}
+          <Button onClick={() => void handleAcknowledge()}>
             {t("firstRunNotice.confirm")}
           </Button>
         </DialogFooter>

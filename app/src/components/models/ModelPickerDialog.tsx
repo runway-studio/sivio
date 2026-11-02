@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Check, Loader2, RefreshCw } from "lucide-react";
@@ -11,6 +11,7 @@ import { Input, fieldClass } from "@/components/ui/input";
 import { SearchField } from "@/components/ui/search-field";
 import { proxyKeys } from "@/lib/query/proxy";
 import { modelHubApi } from "@/lib/api/model-hub";
+import { useUnsavedValue } from "@/lib/unsavedChanges";
 import { extractErrorMessage } from "@/utils/errorUtils";
 
 export function ModelPickerDialog({
@@ -49,14 +50,24 @@ export function ModelPickerContent({
   setBusy,
   page = false,
   onClientChange,
+  onManageProviders,
+  onVerify,
+  initialSelection,
+  fixedClient = false,
 }: {
+  onVerify?: (app: ProxyAppId) => void;
+  fixedClient?: boolean;
+  initialSelection?: { providerId: string; model: string };
   initialApp: ProxyAppId;
   close?: () => void;
   page?: boolean;
   onClientChange?: (app: ProxyAppId) => void;
+  onManageProviders?: (app: ProxyAppId) => void;
   setBusy: (busy: boolean) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const tr = (cn: string, en: string) =>
+    i18n.language.startsWith("zh") ? cn : en;
   const cache = useQueryClient();
   const [app, setApp] = useState(initialApp);
   const [search, setSearch] = useState("");
@@ -67,16 +78,57 @@ export function ModelPickerContent({
     queryFn: () => modelHubApi.catalog(app),
     refetchOnWindowFocus: false,
   });
+  const commandApplied = useRef<typeof initialSelection>();
+  const baseline = useRef<{
+    app: ProxyAppId;
+    provider: string;
+    model: string;
+  }>();
+  const draft = useRef({ provider, model });
+  draft.current = { provider, model };
   useEffect(() => {
-    setProvider(query.data?.providerId ?? "");
-    setModel(query.data?.model ?? "");
-  }, [query.data]);
+    if (!query.data) return;
+    const previous = baseline.current;
+    const dirty =
+      previous?.app === app &&
+      (draft.current.provider !== previous.provider ||
+        draft.current.model !== previous.model);
+    const newCommand =
+      initialSelection && commandApplied.current !== initialSelection;
+    if (dirty && !newCommand) return; // Refreshing a changed revision must not discard a user's draft.
+    baseline.current = {
+      app,
+      provider: query.data.providerId ?? "",
+      model: query.data.model ?? "",
+    };
+    if (initialSelection && newCommand) {
+      setProvider(initialSelection.providerId);
+      setModel(initialSelection.model);
+      commandApplied.current = initialSelection;
+    } else {
+      setProvider(query.data.providerId ?? "");
+      setModel(query.data.model ?? "");
+    }
+  }, [query.data, app, initialSelection]);
+  useUnsavedValue(
+    page &&
+      baseline.current?.app === app &&
+      (provider !== baseline.current.provider ||
+        model !== baseline.current.model),
+  );
   const save = useMutation({
     mutationFn: () =>
       modelHubApi.select(app, provider, model.trim(), query.data!.revision),
     onMutate: () => setBusy(true),
     onSettled: () => setBusy(false),
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
+      baseline.current = {
+        app,
+        provider: saved.providerId ?? "",
+        model: saved.model ?? "",
+      };
+      setProvider(saved.providerId ?? "");
+      setModel(saved.model ?? "");
       await Promise.all([
         cache.invalidateQueries({ queryKey: ["providers"] }),
         cache.invalidateQueries({ queryKey: proxyKeys.status }),
@@ -105,7 +157,7 @@ export function ModelPickerContent({
           <select
             className={`${fieldClass} h-9 min-w-0 flex-1`}
             value={app}
-            disabled={save.isPending}
+            disabled={save.isPending || fixedClient}
             onChange={(e) => {
               setProvider("");
               setModel("");
@@ -169,6 +221,34 @@ export function ModelPickerContent({
               <Loader2 className="animate-spin" size={18} />
             </p>
           )}
+          {q &&
+            query.data &&
+            !query.isLoading &&
+            !query.error &&
+            !query.data.providers.some(
+              (p) =>
+                `${p.name} ${p.id}`.toLowerCase().includes(q) ||
+                p.models.some((m) =>
+                  `${p.name} ${p.id} ${m}`.toLowerCase().includes(q),
+                ),
+            ) && (
+              <div className="p-3 text-sm" role="status">
+                <p>
+                  {tr(
+                    "没有匹配的供应商或模型。",
+                    "No matching providers or models.",
+                  )}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={save.isPending}
+                  onClick={() => setSearch("")}
+                >
+                  {tr("清空搜索", "Clear search")}
+                </Button>
+              </div>
+            )}
           {query.data?.providers.map((p) => {
             const visible = p.models.filter(
               (m) => !q || `${p.name} ${p.id} ${m}`.toLowerCase().includes(q),
@@ -230,9 +310,20 @@ export function ModelPickerContent({
           {!query.isLoading &&
             !query.error &&
             !query.data?.providers.length && (
-              <p className="p-3 text-sm text-muted-foreground">
-                {t("modelHub.noProviders")}
-              </p>
+              <div className="p-3 text-sm text-muted-foreground">
+                <p>{t("modelHub.noProviders")}</p>
+                {onManageProviders && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    disabled={save.isPending}
+                    onClick={() => onManageProviders(app)}
+                  >
+                    {tr("添加或导入供应商", "Add or import providers")}
+                  </Button>
+                )}
+              </div>
             )}
         </div>
         <div
@@ -302,8 +393,21 @@ export function ModelPickerContent({
           )}
           {page && save.isSuccess && (
             <p role="status" className="mt-3 text-sm text-route-text">
-              {t("modelHub.applied")}
+              {t("modelHub.applied")} ·{" "}
+              {tr(
+                "配置已保存；客户端读取未观测，请在新会话中验证。",
+                "Configuration saved; client reload is unobserved. Verify in a new session.",
+              )}
             </p>
+          )}
+          {page && save.isSuccess && onVerify && (
+            <Button
+              className="mt-3"
+              variant="outline"
+              onClick={() => onVerify(app)}
+            >
+              {tr("验证并打开客户端", "Verify and open client")}
+            </Button>
           )}
           <div className="mt-4 flex justify-end gap-2">
             {!page && (

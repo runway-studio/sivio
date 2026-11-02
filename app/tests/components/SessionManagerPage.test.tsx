@@ -337,6 +337,28 @@ describe("SessionManagerPage", () => {
     expect(await screen.findByText("Alpha Session")).toBeInTheDocument();
   });
 
+  it("does not reopen a command-selected session after returning and refreshing", async () => {
+    const commandSession = {
+      providerId: "codex",
+      sessionId: "codex-session-1",
+    };
+    const { client } = renderPage("codex", { commandSession });
+    await screen.findByRole("heading", { level: 1, name: "Alpha Session" });
+    fireEvent.click(screen.getByRole("button", { name: "返回会话列表" }));
+    await screen.findByRole("region", { name: "会话列表" });
+    client.setQueryData<SessionMeta[]>(["sessions"], (old) =>
+      old?.map((s) => ({ ...s, lastActiveAt: (s.lastActiveAt ?? 0) + 1 })),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("region", { name: "会话列表" }),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "返回会话列表" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("drills into a session, merges tool calls and steps between sessions", async () => {
     renderPage("codex");
     await screen.findByText("Alpha Session");

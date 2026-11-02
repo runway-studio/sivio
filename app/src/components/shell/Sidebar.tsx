@@ -1,3 +1,4 @@
+import { visibleClientIds, clientCapabilityLabel } from "@/config/appConfig";
 import { NetworkControl } from "@/components/network/NetworkRuntime";
 import { useRef, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
@@ -35,7 +36,6 @@ import {
 } from "@/lib/desktopPreferences";
 import type { AppId } from "@/lib/api";
 import type { VisibleApps } from "@/types";
-import { APP_IDS } from "@/config/appConfig";
 import type { GlobalPage, SettingsSection, View } from "@/lib/navigation";
 import {
   NETWORK_TABS,
@@ -72,6 +72,7 @@ interface SidebarProps {
   onExitSettings: () => void;
   /** 打开了「启动时检查应用更新」并且查到了新版本 */
   appsUpdateAvailable?: boolean;
+  onResumeSetup?: () => void;
 }
 
 type DirectoryProps = SidebarProps & { collapsed: boolean };
@@ -83,7 +84,7 @@ type DirectoryProps = SidebarProps & { collapsed: boolean };
  * 收起时各行只剩图标，名字由 HoverTip 从右侧报；展开时文字可见，不再挂提示。
  */
 export function Sidebar(props: SidebarProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navRef = useRef<HTMLElement>(null);
   const { collapsed, toggle } = useSidebarCollapsed(navRef);
   const { view } = props;
@@ -111,6 +112,17 @@ export function Sidebar(props: SidebarProps) {
         domain={props.domain}
         inSettings={inSettings}
       />
+      {props.onResumeSetup && (
+        <div className="shrink-0 border-b border-border pb-2">
+          <NavItem
+            collapsed={collapsed}
+            selected={false}
+            icon={Cable}
+            label={i18n.language.startsWith("zh") ? "继续接入" : "Resume setup"}
+            onClick={props.onResumeSetup}
+          />
+        </div>
+      )}
       {inSettings ? (
         <SettingsDirectory {...props} collapsed={collapsed} />
       ) : props.domain !== "model" ? (
@@ -288,7 +300,7 @@ function MainDirectory({
   const preferences = useWorkspacePreferences();
   const { hasUpdate } = useUpdate();
   const { appStatus, todayCost, authNeedsAttention } = useSidebarStatus();
-  const apps = APP_IDS.filter((app) => visibleApps[app]);
+  const apps = visibleClientIds(visibleApps);
   const onAppPage = isAppPage(view);
 
   const todayLabel =
@@ -501,6 +513,8 @@ function AppNavItem({
   onSelect: () => void;
 }) {
   const { t } = useTranslation();
+  const { i18n } = useTranslation();
+  const capability = clientCapabilityLabel(app, i18n.language.startsWith("zh"));
   const name = APP_DISPLAY_NAME[app];
   const tag = modeTag(status, t);
   const modeName = status.mapping
@@ -568,7 +582,9 @@ function AppNavItem({
       )}
     >
       <AppGlyph app={app} size={16} badgeClassName={badgeBg} />
-      <span className="min-w-0 flex-1 truncate">{name}</span>
+      <span className="min-w-0 flex-1 truncate" title={capability}>
+        {name}
+      </span>
       {status.alert ? (
         <span
           role="img"

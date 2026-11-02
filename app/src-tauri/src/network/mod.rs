@@ -22,6 +22,7 @@ pub(crate) mod legacy_import;
 #[path = "../../../../native/listener_boundary.rs"]
 mod listener_boundary;
 mod log_stream;
+mod lease;
 mod media;
 mod media_job;
 mod metrics;
@@ -30,6 +31,8 @@ pub(crate) mod outbound;
 mod pac;
 mod port;
 mod profile_enhance;
+mod builtin_rules;
+mod core_bundle;
 mod profile_documents;
 mod proxy_guard;
 pub(crate) mod repository;
@@ -206,6 +209,7 @@ impl Default for Catalog {
 struct Runtime {
     child: Option<Child>,
     session: Option<ipc::OwnerSessionProof>,
+    lease: Option<lease::Heartbeat>,
     generation: u64,
     phase: String,
     error: Option<String>,
@@ -227,6 +231,7 @@ impl Default for Runtime {
         Self {
             child: None,
             session: None,
+            lease: None,
             generation: 0,
             phase: "stopped".into(),
             error: None,
@@ -429,42 +434,13 @@ fn core_hash(core: &str) -> Result<&'static str> {
     }
 }
 fn checked_core(app: &tauri::AppHandle, channel: &str) -> Result<PathBuf> {
-    ensure!(
-        ["stable", "alpha"].contains(&channel),
-        "unsupported core channel"
-    );
-    let name = if channel == "alpha" {
-        "mihomo-alpha"
-    } else {
-        "mihomo"
-    };
-    let path = root()?.join("cores").join(name);
-    if path.is_file() && digest(&std::fs::read(&path)?) == core_hash(channel)? {
-        return Ok(path);
-    }
-    use std::io::Read;
-    let archive = std::fs::File::open(resource(app, &format!("{name}.gz"))?)?;
-    let mut bytes = Vec::new();
-    flate2::read::GzDecoder::new(archive)
-        .take(256 * 1024 * 1024 + 1)
-        .read_to_end(&mut bytes)?;
-    ensure!(
-        bytes.len() <= 256 * 1024 * 1024 && digest(&bytes) == core_hash(channel)?,
-        "bundled Mihomo digest mismatch"
-    );
-    // Core executables exceed the configuration file limit; publish with the same private atomic semantics.
-    let parent = path.parent().context("missing core parent")?;
-    private_dir(parent)?;
-    use std::io::Write;
-    use std::os::unix::fs::PermissionsExt;
-    let mut temp = tempfile::NamedTempFile::new_in(parent)?;
-    temp.write_all(&bytes)?;
-    temp.as_file().sync_all()?;
-    std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o700))?;
-    temp.persist(&path)?;
-    std::fs::File::open(parent)?.sync_all()?;
-    Ok(path)
+    core_bundle::checked(
+        &app.path().resource_dir()?.join("network/mihomo-cores.xz"),
+        &root()?.join("cores"),
+        channel,
+    )
 }
+
 fn compose(yaml: &str, settings: &Settings, socket: &Path) -> Result<String> {
     compose_with_profile(yaml, settings, socket, None, "Sivio")
 }
@@ -1010,6 +986,7 @@ async fn stop_resources(runtime: &mut Runtime) -> Result<()> {
         let _ = server.await;
     }
     runtime.child = None;
+    runtime.lease = None;
     runtime.session = None;
     runtime.port = None;
     runtime.active = None;
@@ -1200,8 +1177,9 @@ async fn start_with_proxy_policy(app: &tauri::AppHandle, state: &NetworkState, c
                 .then_some(())
                 .filter(|_| !policy.suspend_proxy)
                 .map(|_| proxy_guard::config(&catalog.settings));
+            let owner = credentials()?;
             let response = ipc::start_clash(
-                &credentials()?,
+                &owner,
                 &ipc::StartClashRequest {
                     runtime: ipc::RuntimeBundle {
                         yaml: yaml.clone(),
@@ -1227,6 +1205,7 @@ async fn start_with_proxy_policy(app: &tauri::AppHandle, state: &NetworkState, c
                     .generation,
                 token,
             };
+            runtime.lease = Some(lease::Heartbeat::start(owner, proof.clone()));
             runtime.session = Some(proof);
         } else {
             let work = root()?.join("runtime");
@@ -1623,21 +1602,9 @@ fn start_workers(app: tauri::AppHandle, state: NetworkState) {
             timer.tick().await;
             let mut runtime = state.runtime.lock().await;
             let before = (runtime.phase.clone(), runtime.error.clone(), runtime.port);
-            if let Some(proof) = &runtime.session {
-                match ipc::renew_owner(
-                    &credentials().unwrap_or_else(|_| ipc::OwnerCredentials {
-                        identity: ipc::OwnerIdentity::Unix {
-                            uid: u32::MAX,
-                            gid: u32::MAX,
-                        },
-                        app_data_dir: String::new(),
-                        token: None,
-                    }),
-                    proof,
-                )
-                .await
-                {
-                    Ok(response) if response.code == 0 => {
+            if let Some(heartbeat) = &runtime.lease {
+                match heartbeat.latest() {
+                    Ok(()) => {
                         if runtime.phase == "failed" && runtime.managed && !runtime.recovery_required {
                             runtime.phase = "running".into();
                             if control(&runtime, "GET", "/version", None).await.is_ok() {
@@ -1654,7 +1621,7 @@ fn start_workers(app: tauri::AppHandle, state: NetworkState) {
                             }
                         }
                     }
-                    failure => {
+                    Err(detail) => {
                         if let Some(job) = &mut runtime.media {
                             job.cancel();
                         }
@@ -1662,10 +1629,6 @@ fn start_workers(app: tauri::AppHandle, state: NetworkState) {
                         runtime.error = Some(if service_setup::running_code_changed().await {
                             service_setup::APP_RESTART_MESSAGE.into()
                         } else {
-                            let detail = match failure {
-                                Ok(response) => response.message,
-                                Err(error) => error.to_string(),
-                            };
                             format!("helper lease renewal failed; recovery is owned by the service: {detail}")
                         });
                         runtime.port = None;
@@ -1805,6 +1768,9 @@ async fn controller_request(state: &NetworkState, args: Value) -> Result<Value> 
         None
     };
     let response = control(&runtime, method, path, args.get("body").cloned()).await?;
+    if selection {
+        outbound::invalidate_selection();
+    }
     let active = runtime.active.clone();
     let generation = runtime.generation;
     drop(runtime);
@@ -2477,11 +2443,18 @@ async fn execute(
         }
         "start" => {
             let _write = state.write.lock().await;
-            start(app, state, &read_catalog()?).await
+            let result = start(app, state, &read_catalog()?).await?;
+            if let Err(error) = service_setup::remember_running(true) {
+                shutdown(state).await?;
+                return Err(error.context("无法保存网络启动状态"));
+            }
+            Ok(result)
         }
         "stop" => {
             let _write = state.write.lock().await;
+            let remembered = service_setup::remember_running(false);
             shutdown(state).await?;
+            remembered.context("网络已停止，但无法保存下次启动偏好")?;
             Ok(json!({"stopped":true}))
         }
         "proxy.reapply" => {

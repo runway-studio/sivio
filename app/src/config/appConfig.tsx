@@ -42,6 +42,11 @@ export const DEFAULT_VISIBLE_APPS: VisibleApps = {
   mcode: true,
 };
 
+/** One visibility rule shared by the overview and directory; preserve saved choices. */
+export function visibleClientIds(visible: Partial<VisibleApps> = {}): AppId[] {
+  return APP_IDS.filter((app) => visible[app] ?? DEFAULT_VISIBLE_APPS[app]);
+}
+
 /** App IDs shown in Skills panels. */
 export const SKILLS_APP_IDS: AppId[] = [
   "claude",
@@ -234,4 +239,12 @@ export const APP_ICON_MAP: Record<AppId, AppConfig> = {
 
 export function getAppLabel(appId: string): string {
   return APP_ICON_MAP[appId as AppId]?.label ?? appId;
+}
+
+/** Mirrors the backend gateway/stack support matrix; configuration remains available for all ten. */
+export function clientCapabilityLabel(app: AppId, zh: boolean): string {
+  if (isStackAppId(app))
+    return zh ? "配置 · 网关 · 聚合" : "Configuration · Gateway · Aggregation";
+  if (isProxyAppId(app)) return zh ? "配置 · 网关" : "Configuration · Gateway";
+  return zh ? "配置管理 · 手动验证" : "Configuration · Manual verification";
 }

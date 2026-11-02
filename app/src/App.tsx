@@ -1,3 +1,4 @@
+import { saveOnboarding } from "@/lib/clientOnboarding";
 import { CredentialMigrationNotice } from "@/components/settings/CredentialMigrationNotice";
 import { NetworkRuntimeProvider } from "@/components/network/NetworkRuntime";
 import { DRAG_REGION_ATTR } from "@/lib/platform";
@@ -126,6 +127,11 @@ import PromptPanel from "@/components/prompts/PromptPanel";
 import { PROMPT_APP_IDS } from "@/lib/query/prompts";
 import UnifiedSkillsPanel from "@/components/skills/UnifiedSkillsPanel";
 import { DeepLinkImportDialog } from "@/components/DeepLinkImportDialog";
+import {
+  CommandPalette,
+  type CommandTarget,
+} from "@/components/shell/CommandPalette";
+import { ClientOnboarding } from "@/components/overview/ClientOnboarding";
 import { FirstRunNoticeDialog } from "@/components/FirstRunNoticeDialog";
 import { WhatsNewNotice } from "@/components/WhatsNewDialog";
 import { Badge } from "@/components/ui/badge";
@@ -244,6 +250,25 @@ function App() {
     storeView(currentView);
   }, [currentView]);
 
+  const [commandTarget, setCommandTarget] = useState<CommandTarget | null>(
+    null,
+  );
+  useEffect(() => {
+    setCommandTarget((target) => {
+      const destination =
+        target?.kind === "model"
+          ? "modelPicker"
+          : target?.kind === "node"
+            ? "network"
+            : target?.kind === "session"
+              ? "sessions"
+              : undefined;
+      return destination && destination !== currentView ? null : target;
+    });
+  }, [currentView]);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingReturn, setOnboardingReturn] = useState(false);
+  const [modelReturn, setModelReturn] = useState(false);
   const { data: settingsData } = useSettingsQuery();
   useEffect(() => {
     if (!settingsData || !desktopPreferences.data) return;
@@ -277,7 +302,7 @@ function App() {
     if (!visibleApps[activeApp]) {
       setActiveApp(getFirstVisibleApp());
     }
-  }, [visibleApps, activeApp]);
+  }, [visibleApps]);
 
   // 启动后把其他可见应用的供应商列表预取进缓存：第一次切过去直接有数据，不先画骨架
   const providersPrefetchedRef = useRef(false);
@@ -1576,10 +1601,21 @@ function App() {
   const renderGlobalPage = () => {
     switch (currentView) {
       case "overview":
-        return <Overview onOpen={openPage} onApp={selectApp} />;
+        return (
+          <Overview
+            onOpen={openPage}
+            onApp={selectApp}
+            visibleApps={visibleApps}
+            onSetup={() => requestNetworkLeave(() => setOnboardingOpen(true))}
+          />
+        );
       case "network":
         return (
           <NetworkWorkspace
+            onManageProviders={selectApp}
+            commandSearch={
+              commandTarget?.kind === "node" ? commandTarget.name : undefined
+            }
             selectedTab={navigation.networkTab}
             onTabChange={setNetworkTab}
             navigationRef={networkNavigation}
@@ -1601,6 +1637,34 @@ function App() {
         return (
           <ModelHubPage
             view={currentView}
+            commandSelection={
+              commandTarget?.kind === "model" ? commandTarget : undefined
+            }
+            onVerify={(app) =>
+              requestNetworkLeave(() => {
+                try {
+                  saveOnboarding({
+                    version: 1,
+                    app,
+                    step: "verify",
+                    skipped: false,
+                  });
+                  setOnboardingOpen(true);
+                } catch {
+                  toast.error(
+                    i18n.language.startsWith("zh")
+                      ? "无法保存接入进度"
+                      : "Cannot save setup progress",
+                  );
+                }
+              })
+            }
+            onManageProviders={(app) =>
+              requestNetworkLeave(() => {
+                setModelReturn(true);
+                selectApp(app);
+              })
+            }
             activeApp={activeApp}
             onBusyChange={setModelSelectionBusy}
           />
@@ -1678,6 +1742,9 @@ function App() {
         return (
           <SessionManagerPage
             key={sharedFeatureApp}
+            commandSession={
+              commandTarget?.kind === "session" ? commandTarget : undefined
+            }
             appId={sharedFeatureApp}
             fromApp={activeApp}
             onOpenTerminalSettings={() => openSettings("general")}
@@ -1715,6 +1782,11 @@ function App() {
           rail={<DomainRail domain={navigation.domain} onSelect={openDomain} />}
           directory={
             <Sidebar
+              onResumeSetup={
+                onboardingReturn && !onboardingOpen
+                  ? () => requestNetworkLeave(() => setOnboardingOpen(true))
+                  : undefined
+              }
               domain={navigation.domain}
               networkTab={navigation.networkTab}
               onSelectNetworkTab={(tab) => networkNavigation.current?.(tab)}
@@ -1736,6 +1808,24 @@ function App() {
           }
           location={
             <>
+              <CommandPalette
+                isBusy={navigationBusy}
+                onSelect={(target) =>
+                  requestNetworkLeave(() => {
+                    setCommandTarget(target);
+                    if (target.kind === "app") selectApp(target.app);
+                    else if (target.kind === "model") {
+                      setActiveApp(target.app);
+                      openPage("modelPicker");
+                    } else if (target.kind === "node") {
+                      openPage("network");
+                      setNetworkTab("节点");
+                    } else if (target.kind === "session") openPage("sessions");
+                    else openPageFromNav(target.page);
+                  })
+                }
+              />
+
               <span {...DRAG_REGION_ATTR}>
                 {currentView === "settings"
                   ? t("nav.settings")
@@ -1902,7 +1992,47 @@ function App() {
         />
 
         <DeepLinkImportDialog />
-        <FirstRunNoticeDialog />
+        {modelReturn && currentView !== "modelPicker" && (
+          <Button
+            className="fixed bottom-16 right-5 z-40"
+            onClick={() =>
+              requestNetworkLeave(() => {
+                setModelReturn(false);
+                openPage("modelPicker");
+              })
+            }
+          >
+            {i18n.language.startsWith("zh")
+              ? "返回模型选择"
+              : "Return to model selection"}
+          </Button>
+        )}
+        {onboardingOpen && (
+          <ClientOnboarding
+            onClose={() => {
+              setOnboardingOpen(false);
+              setOnboardingReturn(false);
+            }}
+            onConfigure={(app) =>
+              requestNetworkLeave(() => {
+                setOnboardingOpen(false);
+                setOnboardingReturn(true);
+                selectApp(app);
+              })
+            }
+            onInstall={() =>
+              requestNetworkLeave(() => {
+                setOnboardingOpen(false);
+                setOnboardingReturn(true);
+                openPage("apps");
+              })
+            }
+            onVisibilitySaved={() => {
+              void queryClient.invalidateQueries({ queryKey: ["settings"] });
+            }}
+          />
+        )}
+        <FirstRunNoticeDialog onSetup={() => setOnboardingOpen(true)} />
         <NewLayoutDialog />
         <WhatsNewNotice />
       </WindowControlsContext.Provider>

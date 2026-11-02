@@ -98,6 +98,11 @@ function mount() {
     update: (value: NetworkSnapshot) => view.rerender(ui(value)),
   };
 }
+it("opens the existing outbound settings from the shared readiness panel", () => {
+  const view = mount();
+  fireEvent.click(screen.getByRole("button", { name: "检查出口设置" }));
+  expect(view.navigate).toHaveBeenCalledWith("设置");
+});
 it("shows subscription usage, hides outbound IP by default and selects nodes with a generation guard", async () => {
   const view = mount();
   expect(screen.getByRole("progressbar")).toHaveAttribute(

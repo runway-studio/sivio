@@ -1,0 +1,129 @@
+{
+  "policy": {
+    "enabled": true,
+    "max_iterations": 4,
+    "stop_score": 90,
+    "min_gain": 5
+  },
+  "scope": "planning_only",
+  "iterations": [
+    {
+      "iteration_id": "r1",
+      "iteration_index": 1,
+      "max_iterations": 4,
+      "quality_score": 80,
+      "score_breakdown": {
+        "goal_fit": 20,
+        "user_business_closure": 15,
+        "scope_clarity": 13,
+        "acceptance_criteria": 10,
+        "risks_dependencies": 8,
+        "engineering_actionability": 10,
+        "clarity": 4
+      },
+      "critical_findings": [
+        "REQ-01/A1 continuity defaults and identity",
+        "REQ-02/A3 hot switch vs drain",
+        "REQ-03 zero/observe",
+        "REQ-04/A4 opening balance and durable dispatch",
+        "A2 lock order",
+        "A5 active dependency restore",
+        "F1 acceptance dependency"
+      ],
+      "improvement_candidates": [
+        {
+          "title": "明确连续性默认与失效身份",
+          "priority": "P1",
+          "reason": "新旧行为相互矛盾",
+          "expected_gain": 3,
+          "cost": "low",
+          "verification": "默认矩阵与认证轮换场景",
+          "owner_skill": "opc-openspec-change"
+        },
+        {
+          "title": "区分热切、按app排空、快照恢复",
+          "priority": "P1",
+          "reason": "共享listener隔离和在途承诺冲突",
+          "expected_gain": 3,
+          "cost": "medium",
+          "verification": "两类J06及全局恢复边界",
+          "owner_skill": "opc-openspec-change"
+        },
+        {
+          "title": "补预算模式、基线与持久边界",
+          "priority": "P1",
+          "reason": "存在清零、漏账与模式歧义",
+          "expected_gain": 4,
+          "cost": "medium",
+          "verification": "opening/pending/unknown场景",
+          "owner_skill": "opc-openspec-change"
+        },
+        {
+          "title": "固定锁序与活跃对象恢复规则",
+          "priority": "P1",
+          "reason": "重入和缺秘密活动引用",
+          "expected_gain": 2,
+          "cost": "medium",
+          "verification": "并发与同ID活跃依赖场景",
+          "owner_skill": "opc-openspec-change"
+        },
+        {
+          "title": "场景主责任消除验收反向依赖",
+          "priority": "P1",
+          "reason": "前置任务要求后继能力",
+          "expected_gain": 2,
+          "cost": "low",
+          "verification": "场景覆盖与DAG核验",
+          "owner_skill": "opc-openspec-change"
+        }
+      ],
+      "expected_gain": 14,
+      "confidence": "medium",
+      "evidence": [
+        "requirements-r1.md",
+        "architecture-r1.md",
+        "feasibility-r1.md",
+        "validation-r1.json"
+      ],
+      "decision": "continue",
+      "stop_reason": null,
+      "next_iteration_task": "只修上述阻塞及相关P2，更新spec/design/task/acceptance，三门复核关闭证据并重跑规划验证。"
+    },
+    {
+      "iteration_id": "r2",
+      "iteration_index": 2,
+      "max_iterations": 4,
+      "quality_score": 94,
+      "score_breakdown": {
+        "goal_fit": 20,
+        "user_business_closure": 19,
+        "scope_clarity": 15,
+        "acceptance_criteria": 15,
+        "risks_dependencies": 8,
+        "engineering_actionability": 13,
+        "clarity": 4
+      },
+      "deductions": {
+        "user_business_closure": "每客户端方案和本机估算预算的适用限制已明确，真实项目/账单全覆盖不承诺。",
+        "risks_dependencies": "真实账号、Intel/macOS12与系统授权验收依赖仍待实施时获得。",
+        "engineering_actionability": "锁/写屏障贯穿现有多个入口，必须靠实施时竞争与强杀验证收口。",
+        "clarity": "九方向跨模块文档较长，以任务和场景责任表降低查阅成本。"
+      },
+      "critical_findings": [],
+      "improvement_candidates": [],
+      "expected_gain": 2,
+      "confidence": "medium",
+      "evidence": [
+        "requirements-r2.md",
+        "architecture-r2.md",
+        "feasibility-r2.md",
+        "validation-r2.json",
+        "validation-final.json",
+        "openspec-validation.json"
+      ],
+      "decision": "stop",
+      "stop_reason": "quality_reached",
+      "next_iteration_task": null
+    }
+  ]
+}

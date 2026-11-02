@@ -1,0 +1,12 @@
+{
+  "command": [
+    "openspec",
+    "validate",
+    "improve-ai-workspace-readiness",
+    "--strict"
+  ],
+  "exit_code": 0,
+  "stdout": "Change 'improve-ai-workspace-readiness' is valid",
+  "stderr": "",
+  "scope": "OpenSpec planning validation only"
+}

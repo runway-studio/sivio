@@ -66,3 +66,6 @@ pub(crate) mod local_backup;
 pub mod model_picker;
 
 pub mod routing_groups;
+pub mod workspace_readiness;
+
+pub mod client_diagnostic;

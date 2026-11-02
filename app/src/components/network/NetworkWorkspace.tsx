@@ -1,3 +1,4 @@
+import type { AppId } from "@/lib/api";
 import { NETWORK_TABS, type NetworkTab } from "@/lib/navigation";
 import { useViewMemory, useViewScroll } from "@/hooks/useViewMemory";
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
@@ -102,12 +103,16 @@ function Empty({ children }: { children: React.ReactNode }) {
   );
 }
 function NetworkWorkspaceContent({
+  onManageProviders,
   selectedTab,
+  commandSearch,
   onTabChange,
   navigationRef,
   requestLeave,
 }: {
   selectedTab?: Tab;
+  commandSearch?: string;
+  onManageProviders?: (app: AppId) => void;
   onTabChange?: (tab: Tab) => void;
   navigationRef?: MutableRefObject<((tab: Tab) => void) | null>;
   requestLeave?: (proceed: () => void) => void;
@@ -129,6 +134,9 @@ function NetworkWorkspaceContent({
   const originalEditor = useRef<string | null>(null);
   const originalSettings = useRef<string | null>(null);
   const [search, setSearch] = useViewMemory("network-search", "");
+  useEffect(() => {
+    if (commandSearch !== undefined) setSearch(commandSearch);
+  }, [commandSearch]);
   const [editor, setEditor] = useState<{
     id?: string;
     baseRevision?: string;
@@ -425,7 +433,8 @@ function NetworkWorkspaceContent({
               {tr(APP_RESTART_MESSAGE)}
             </p>
           )}
-          {data && !data.appRestartRequired &&
+          {data &&
+            !data.appRestartRequired &&
             /服务|helper|signature/i.test(
               operationError || data.runtime.error || "",
             ) &&
@@ -515,7 +524,11 @@ function NetworkWorkspaceContent({
           {data && (
             <>
               {tab === "首页" && (
-                <NetworkHome snapshot={data} onNavigate={navigateTab} />
+                <NetworkHome
+                  snapshot={data}
+                  onNavigate={navigateTab}
+                  onManageProviders={onManageProviders}
+                />
               )}
               <div hidden={tab !== "流量"}>
                 <NetworkTrafficPanel

@@ -148,10 +148,12 @@ serde_json = "1.0"
 serial_test = "4.0"
 
 [profile.release]
-panic = "abort"
+# Keep the shipped development build's unwind semantics in optimized bundles.
+panic = "unwind"
 lto = "thin"
-opt-level = 3
+opt-level = "s"
 codegen-units = 1
+strip = "symbols"
 
 [[bin]]
 name = "si-helper-control"

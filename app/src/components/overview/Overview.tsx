@@ -1,10 +1,18 @@
+import { coreStatusLabel } from "@/lib/workspaceReadiness";
+import { WorkspaceReadiness } from "./WorkspaceReadiness";
+import type { VisibleApps } from "@/types";
 import { useTranslation } from "react-i18next";
 import { useWorkspacePreferences } from "@/lib/desktopPreferences";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ArrowRight, Box, Check, Globe, Layers, Server } from "lucide-react";
 import { AppGlyph } from "@/components/shell/AppGlyph";
 import logo from "@/assets/icons/logo.svg";
-import { APP_IDS, getAppLabel } from "@/config/appConfig";
+import {
+  APP_IDS,
+  getAppLabel,
+  visibleClientIds,
+  clientCapabilityLabel,
+} from "@/config/appConfig";
 import { providersQueryOptions } from "@/lib/query";
 import { useUsageSummary } from "@/lib/query/usage";
 import { useProxyStatusQuery } from "@/lib/query/proxy";
@@ -18,9 +26,13 @@ import {
 export function Overview({
   onOpen,
   onApp,
+  visibleApps,
+  onSetup,
 }: {
+  onSetup?: () => void;
   onOpen: (page: GlobalPage) => void;
   onApp: (app: AppId) => void;
+  visibleApps?: Partial<VisibleApps>;
 }) {
   const { t, i18n } = useTranslation();
   const preferences = useWorkspacePreferences();
@@ -36,10 +48,15 @@ export function Overview({
   const providers = useQueries({
     queries: APP_IDS.map((app) => providersQueryOptions(app)),
   });
+  const visibleClients = visibleClientIds(visibleApps);
   const totalProviders = providers.reduce(
     (sum, item) => sum + Object.keys(item.data?.providers ?? {}).length,
     0,
   );
+  const providersUnavailable = providers.some(
+    (item) => item.isError || item.data?.readError,
+  );
+  const providersPending = providers.some((item) => !item.data);
   const running = network.data?.runtime.phase === "running";
   return (
     <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-7 pb-10 pt-6">
@@ -75,51 +92,63 @@ export function Overview({
           {
             id: "usage" as const,
             label: tr("今日 Token 用量", "Tokens today"),
-            value: usage.data
-              ? usage.data.realTotalTokens.toLocaleString()
-              : "—",
-            note: usage.data
-              ? `${usage.data.totalRequests.toLocaleString()} ${tr("次请求", "requests")}`
-              : tr("等待本地统计", "Waiting for local statistics"),
+            value:
+              !usage.isError && usage.data
+                ? usage.data.realTotalTokens.toLocaleString()
+                : "—",
+            note: usage.isError
+              ? tr("统计暂不可用", "Statistics unavailable")
+              : usage.data
+                ? `${usage.data.totalRequests.toLocaleString()} ${tr("次请求", "requests")}`
+                : tr("等待本地统计", "Waiting for local statistics"),
             icon: Layers,
           },
           {
             id: "router" as const,
             label: tr("AI 路由服务", "AI router"),
-            value: proxy.data
-              ? proxy.data.running
-                ? tr("运行中", "Running")
-                : tr("已停止", "Stopped")
-              : "—",
-            note: proxy.data?.running
-              ? `127.0.0.1:${proxy.data.port}`
-              : tr(
-                  "在工具页选择路由模式",
-                  "Select routing mode on an app page",
-                ),
+            value: proxy.isError
+              ? tr("状态不可用", "Status unavailable")
+              : proxy.data
+                ? proxy.data.running
+                  ? tr("运行中", "Running")
+                  : tr("已停止", "Stopped")
+                : "—",
+            note:
+              !proxy.isError && proxy.data?.running
+                ? `127.0.0.1:${proxy.data.port}`
+                : tr(
+                    "在工具页选择路由模式",
+                    "Select routing mode on an app page",
+                  ),
             icon: Server,
           },
           {
             id: "network" as const,
-            label: tr("网络出口", "Network routing"),
-            value: network.data
-              ? running
-                ? tr("已连接", "Connected")
-                : tr("已停止", "Stopped")
-              : "—",
-            note: running
-              ? `${network.data?.runtime.managed ? tr("受管", "Managed") : tr("普通", "Ordinary")} Mihomo · :${network.data?.runtime.port}`
-              : tr(
-                  "选择配置后启动网络",
-                  "Select a profile, then start the network",
-                ),
+            label: tr("网络内核", "Network core"),
+            value: coreStatusLabel(
+              network.data?.runtime.phase,
+              i18n.language.startsWith("zh"),
+              network.isError,
+            ),
+            note:
+              !network.isError && running
+                ? `${network.data?.runtime.managed ? tr("受管", "Managed") : tr("普通", "Ordinary")} Mihomo · :${network.data?.runtime.port}`
+                : tr(
+                    "选择配置后启动网络",
+                    "Select a profile, then start the network",
+                  ),
             icon: Globe,
           },
           {
             id: "providers" as const,
             label: tr("供应商配置", "Provider configurations"),
-            value: String(totalProviders),
-            note: `${APP_IDS.length} ${tr("种 AI 客户端", "AI clients")}`,
+            value:
+              providersUnavailable || providersPending
+                ? "—"
+                : String(totalProviders),
+            note: providersUnavailable
+              ? tr("配置暂不可用", "Configuration unavailable")
+              : `${APP_IDS.length} ${tr("种 AI 客户端", "AI clients")}`,
             icon: Box,
           },
         ]
@@ -144,9 +173,11 @@ export function Overview({
               {tr("网络工作区", "Network workspace")}
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              {network.data?.catalog.profiles.length ?? 0}{" "}
-              {tr("份配置 · AI 出站", "profiles · AI outbound")}{" "}
-              {network.data?.catalog.outbound ?? "direct"}
+              {network.isError
+                ? tr("网络状态不可用", "Network state unavailable")
+                : network.data
+                  ? `${network.data.catalog.profiles.length} ${tr("份配置 · AI 出站", "profiles · AI outbound")} ${network.data.catalog.outbound}`
+                  : tr("正在读取网络状态…", "Reading network state…")}
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => onOpen("network")}>
@@ -170,17 +201,38 @@ export function Overview({
           ))}
         </div>
       </section>
+      <div className="mb-7">
+        <WorkspaceReadiness
+          onManageProviders={onApp}
+          onManageNetwork={() => onOpen("network")}
+        />
+      </div>
       <section>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-medium">{tr("AI 工具", "AI tools")}</h2>
-          <Button variant="ghost" size="sm" onClick={() => onOpen("apps")}>
-            {tr("安装与管理", "Install and manage")}
-            <ArrowRight size={14} />
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-1">
+            {onSetup && (
+              <Button variant="ghost" size="sm" onClick={onSetup}>
+                {tr("接入引导", "Client setup")}
+                <ArrowRight size={14} />
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={() => onOpen("apps")}>
+              {tr("安装与管理", "Install and manage")}
+            </Button>
+          </div>
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {APP_IDS.map((app, index) => {
-            const query = providers[index];
+          {visibleClients.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              {tr(
+                "尚未选择常用工具，请通过安装与管理添加。",
+                "Choose your tools in Install and manage.",
+              )}
+            </p>
+          )}
+          {visibleClients.map((app) => {
+            const query = providers[APP_IDS.indexOf(app)];
             const count = Object.keys(query.data?.providers ?? {}).length;
             return (
               <button
@@ -196,9 +248,14 @@ export function Overview({
                     {getAppLabel(app)}
                   </span>
                   <span className="mt-1 block text-xs text-muted-foreground">
-                    {query.isError
+                    {query.isError || query.data?.readError
                       ? tr("配置不可用", "Configuration unavailable")
-                      : `${count} ${tr("个供应商配置", "provider configurations")}`}
+                      : !query.data
+                        ? tr("正在读取配置…", "Reading configuration…")
+                        : `${count} ${tr("个供应商配置", "provider configurations")}`}
+                  </span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {clientCapabilityLabel(app, i18n.language.startsWith("zh"))}
                   </span>
                 </span>
                 <ArrowRight

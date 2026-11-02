@@ -126,6 +126,7 @@ const linkButton =
   "h-[22px] rounded-[4px] px-0.5 text-caption text-fg-1 underline decoration-border-strong underline-offset-[3px] hover:decoration-fg-2";
 
 interface SessionManagerPageProps {
+  commandSession?: { providerId: string; sessionId: string };
   appId: string;
   /** 侧栏上当前的应用（从 Claude Desktop 进来时要提示一句） */
   fromApp?: AppId;
@@ -135,6 +136,7 @@ interface SessionManagerPageProps {
 
 export function SessionManagerPage({
   appId,
+  commandSession,
   fromApp,
   onOpenTerminalSettings,
 }: SessionManagerPageProps) {
@@ -151,6 +153,21 @@ export function SessionManagerPage({
   const [groupMode, setGroupMode] = useState<GroupMode>(readGroupMode);
   const [expanded, setExpanded] = useState<Set<string>>(readExpanded);
   const [readerKey, setReaderKey] = useState<string | null>(null);
+  const appliedCommand = useRef<typeof commandSession>();
+  useEffect(() => {
+    if (!commandSession || !data || appliedCommand.current === commandSession)
+      return;
+    const match = data.find(
+      (s) =>
+        s.providerId === commandSession.providerId &&
+        s.sessionId === commandSession.sessionId,
+    );
+    if (match) {
+      appliedCommand.current = commandSession;
+      setAppFilter("all");
+      setReaderKey(getSessionKey(match));
+    }
+  }, [commandSession, data]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(
     () => new Set(),

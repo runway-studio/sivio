@@ -1,0 +1,29 @@
+{
+  "scope": "planning documents only; no product tests run",
+  "requirements": 23,
+  "scenarios": 68,
+  "tasks": 24,
+  "local_links_checked": 100,
+  "scenario_ownership": "see errors",
+  "dependency_dag": "acyclic",
+  "errors": [
+    "invalid scenario owner R23.S4"
+  ],
+  "files_sha256": {
+    "acceptance.md": "ca17225ff4d3438f26b5dd947fd4e04a9cb1011c8e9f0aa9057184ed45f2e4ae",
+    "brief.md": "6be81e7bd8a123944e135066026ff1a192e119d27aab81ef4efe87b4bf58ece6",
+    "design.md": "91c1f0677e688165aa637b3b25d5285a3156eed10cf0be89a2daa326dc8a9b92",
+    "proposal.md": "27ce78275df2cfc37c09a63075970d4b53eca903e6626e17ede0ced3a1ef1496",
+    "scenario-ownership.md": "e7418cedd590ed9f2ae4cf995868fb678c38f63713d6120cc2156fb282adbdce",
+    "specs/ai-tools/spec.md": "43af71b0250afc04d73f595ab81d36355782bd34c3ce7c78045f68151203ed37",
+    "specs/budget-controls/spec.md": "8d0acdea6371392154d2f54fef50db5d96f901235c03c9f1bc523cf185db5d49",
+    "specs/data-lifecycle/spec.md": "a2c3563a7d13d247d7bfc967f60a3c6aa88ca0dffb97eb9b7f3cf4525a2e66dc",
+    "specs/desktop-shell/spec.md": "950106a4a34235bfe26d59a38693f2713b4a31fceadf8e7fd1167bd59f9205ca",
+    "specs/integration-runtime/spec.md": "e2793c4bea66efc10ce08fe3229ba5bd5a9cfc0ae500b66450a32f1be6c8e65d",
+    "specs/model-routing/spec.md": "a6ee2661b86e6b1ef9626d301349e5ec4fc38679661d29758a942bf1ae4419ef",
+    "specs/operational-reporting/spec.md": "8a79d17165914155ebc3a8d42e47eff74737d62ace8a532bf04ba7822a0967e4",
+    "specs/project-environments/spec.md": "b15d6ff56e78f0157e978ac2c7ba0536ad8cf6ae5258b18d4ba140730d36e423",
+    "specs/workspace-readiness/spec.md": "cd9b0844490f19f77752cfc13b9bd0acf43392466029fec0d4422fa9a24618a1",
+    "tasks.md": "dfc6e56d5064aca39cc9d23ea2af3546f22f131c62c03da217e60f9ae41aa03e"
+  }
+}

@@ -317,7 +317,7 @@ pub(crate) async fn inspect_installation_with_digest(
 
 /// Renew only the authenticated, currently active generation; callers schedule every five seconds.
 pub async fn renew_owner(credentials: &OwnerCredentials, session: &OwnerSessionProof) -> Result<Response<()>> {
-    protected_call(Verb::Post, IpcCommand::RenewOwner, credentials, Some(session), (), None).await
+    protected_call(Verb::Post, IpcCommand::RenewOwner, credentials, Some(session), (), Some(Duration::from_secs(3))).await
 }
 
 pub async fn control_mihomo(credentials:&OwnerCredentials,session:&OwnerSessionProof,request:&crate::MihomoControlRequest)->Result<Response<serde_json::Value>> {protected_call(Verb::Post,IpcCommand::MihomoControl,credentials,Some(session),request.clone(),Some(Duration::from_secs(10))).await}

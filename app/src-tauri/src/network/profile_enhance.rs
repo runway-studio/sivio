@@ -80,11 +80,14 @@ fn transform(
     Ok(config)
 }
 pub fn apply(
-    config: Mapping,
+    mut config: Mapping,
     global: &Settings,
     profile: Option<&Value>,
     name: &str,
 ) -> Result<Mapping> {
+    if global.builtin_enhanced {
+        super::builtin_rules::apply(&mut config);
+    }
     let profile: ProfileEnhancement = profile
         .map(|value| serde_json::from_value(value.clone()))
         .transpose()?

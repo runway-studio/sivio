@@ -10,6 +10,7 @@ struct Egress {
     generation: u64,
     alive: bool,
     health: Option<Health>,
+    selection_epoch: u64,
 }
 #[derive(Clone)]
 struct Health {
@@ -63,10 +64,43 @@ pub(super) fn validate(mode: &str, custom: Option<&str>) -> anyhow::Result<()> {
     }
     Ok(())
 }
+pub(super) fn invalidate_selection() {
+    let mut egress = EGRESS.write().unwrap_or_else(|e| e.into_inner());
+    egress.selection_epoch = egress.selection_epoch.wrapping_add(1);
+}
 pub(super) fn configure(mode: &str, custom: Option<String>) {
     let mut egress = EGRESS.write().unwrap_or_else(|e| e.into_inner());
+    if egress.mode != mode || egress.custom != custom {
+        egress.selection_epoch = egress.selection_epoch.wrapping_add(1);
+    }
     egress.mode = mode.into();
     egress.custom = custom;
+}
+/// Cheap passive state: no control-channel I/O, DNS, authentication or proxy changes.
+pub(crate) struct Observation {
+    pub mode: String,
+    pub available: bool,
+    pub generation: u64,
+    pub revision: String,
+}
+pub(crate) fn observe() -> Result<Observation, String> {
+    let egress = EGRESS.read().map_err(|_| "outbound_unavailable")?;
+    Ok(Observation {
+        mode: egress.mode.clone(),
+        available: egress.alive && egress.port.is_some() && egress.health.is_some(),
+        generation: egress.generation,
+        revision: crate::services::workspace_readiness::revision(
+            "outbound",
+            &(
+                &egress.mode,
+                &egress.custom,
+                egress.port,
+                egress.generation,
+                egress.alive,
+                egress.selection_epoch,
+            ),
+        )?,
+    })
 }
 pub(super) fn core(port: Option<u16>, generation: u64, alive: bool) {
     let mut egress = EGRESS.write().unwrap_or_else(|e| e.into_inner());
@@ -90,13 +124,21 @@ pub(super) fn ready(
     egress.health = Some(Health { socket, session });
 }
 pub(crate) async fn snapshot() -> Result<(reqwest::Client, Option<String>), ProxyError> {
+    snapshot_with_policy(false).await
+}
+pub(crate) async fn diagnostic_snapshot() -> Result<(reqwest::Client, Option<String>), ProxyError> {
+    snapshot_with_policy(true).await
+}
+async fn snapshot_with_policy(
+    diagnostic: bool,
+) -> Result<(reqwest::Client, Option<String>), ProxyError> {
     let egress = EGRESS
         .read()
         .map_err(|_| ProxyError::ConfigError("AI outbound state unavailable".into()))?
         .clone();
     let generation = egress.generation;
     let mode = egress.mode.clone();
-    let snapshot = snapshot_of(egress).await?;
+    let snapshot = snapshot_of_policy(egress, diagnostic).await?;
     if mode == "managed-network" {
         let current = EGRESS
             .read()
@@ -109,7 +151,14 @@ pub(crate) async fn snapshot() -> Result<(reqwest::Client, Option<String>), Prox
     }
     Ok(snapshot)
 }
+#[cfg(test)]
 async fn snapshot_of(egress: Egress) -> Result<(reqwest::Client, Option<String>), ProxyError> {
+    snapshot_of_policy(egress, false).await
+}
+async fn snapshot_of_policy(
+    egress: Egress,
+    diagnostic: bool,
+) -> Result<(reqwest::Client, Option<String>), ProxyError> {
     let proxy = match egress.mode.as_str() {
         "direct" => None,
         "managed-network" => {
@@ -161,6 +210,9 @@ async fn snapshot_of(egress: Egress) -> Result<(reqwest::Client, Option<String>)
     let mut builder = reqwest::Client::builder()
         .no_proxy()
         .connect_timeout(std::time::Duration::from_secs(30));
+    if diagnostic {
+        builder = builder.redirect(reqwest::redirect::Policy::none());
+    }
     if let Some(proxy) = &proxy {
         builder = builder.proxy(
             reqwest::Proxy::all(proxy)

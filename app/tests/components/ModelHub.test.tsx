@@ -7,7 +7,10 @@ import {
 } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, expect, it, vi } from "vitest";
-import { ModelPickerDialog } from "@/components/models/ModelPickerDialog";
+import {
+  ModelPickerDialog,
+  ModelPickerContent,
+} from "@/components/models/ModelPickerDialog";
 import { RouteDecisionsDialog } from "@/components/models/RouteDecisionsDialog";
 import { modelHubApi, type ModelCatalog } from "@/lib/api/model-hub";
 import { createTestQueryClient } from "../utils/testQueryClient";
@@ -293,9 +296,7 @@ it.each(["smart", "pace"] as const)(
       await screen.findByText(`routingGroups.reasons.${strategy}`),
     ).toBeInTheDocument();
     expect(screen.getByText("routingGroups.quotaFallback")).toBeInTheDocument();
-    expect(
-      screen.getByText(/missing_weekly/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/missing_weekly/)).toBeInTheDocument();
     expect(screen.getByText(/routingGroups.quotaRemaining/)).toHaveTextContent(
       "routingGroups.quotaPace",
     );
@@ -306,3 +307,93 @@ it.each(["smart", "pace"] as const)(
     ).not.toBeInTheDocument();
   },
 );
+
+it("offers a clear search action when no model matches", async () => {
+  mount(<ModelPickerDialog app="claude" open onOpenChange={vi.fn()} />);
+  await screen.findByRole("heading", { name: "Alpha" });
+  fireEvent.change(screen.getByLabelText("modelHub.search"), {
+    target: { value: "missing-model-xyz" },
+  });
+  expect(
+    screen.queryByRole("heading", { name: "Alpha" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: /Clear search|清空搜索/ }),
+  );
+  expect(screen.getByRole("heading", { name: "Alpha" })).toBeInTheDocument();
+});
+it("routes empty-provider setup to the selected client's existing management flow", async () => {
+  vi.mocked(modelHubApi.catalog).mockResolvedValue({
+    ...catalog,
+    providers: [],
+    providerId: null,
+    model: null,
+  });
+  const manage = vi.fn();
+  mount(
+    <ModelPickerContent
+      initialApp="codex"
+      page
+      setBusy={vi.fn()}
+      onManageProviders={manage}
+    />,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: /Add or import providers|添加或导入供应商/,
+    }),
+  );
+  expect(manage).toHaveBeenCalledWith("codex");
+  expect(modelHubApi.select).not.toHaveBeenCalled();
+});
+
+it("keeps an unsaved model across catalog refresh and registers navigation protection", async () => {
+  const { hasUnsavedChanges } = await import("@/lib/unsavedChanges");
+  const client = createTestQueryClient();
+  render(
+    <QueryClientProvider client={client}>
+      <ModelPickerContent initialApp="claude" page setBusy={() => {}} />
+    </QueryClientProvider>,
+  );
+  await screen.findByRole("heading", { name: "Alpha" });
+  fireEvent.change(screen.getByLabelText("modelHub.modelId"), {
+    target: { value: "draft-model" },
+  });
+  await waitFor(() => expect(hasUnsavedChanges()).toBe(true));
+  client.setQueryData(["model-picker", "claude"], {
+    ...catalog,
+    revision: "revision-2",
+    model: "external-model",
+  });
+  await waitFor(() =>
+    expect(screen.getByLabelText("modelHub.modelId")).toHaveValue(
+      "draft-model",
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "modelHub.apply" }));
+  await waitFor(() =>
+    expect(modelHubApi.select).toHaveBeenCalledWith(
+      "claude",
+      "a",
+      "draft-model",
+      "revision-2",
+    ),
+  );
+});
+it("offers verification and client launch after configuration is saved", async () => {
+  const onVerify = vi.fn();
+  mount(
+    <ModelPickerContent
+      initialApp="claude"
+      page
+      setBusy={() => {}}
+      onVerify={onVerify}
+    />,
+  );
+  await screen.findByRole("heading", { name: "Alpha" });
+  fireEvent.click(screen.getByRole("button", { name: "modelHub.apply" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "验证并打开客户端" }),
+  );
+  expect(onVerify).toHaveBeenCalledWith("claude");
+});

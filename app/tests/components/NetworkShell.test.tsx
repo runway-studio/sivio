@@ -68,7 +68,7 @@ beforeEach(() => {
       return {};
     });
 });
-function mount() {
+function mount(onResumeSetup?: () => void) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -89,7 +89,7 @@ function mount() {
   return render(
     <QueryClientProvider client={client}>
       <NetworkRuntimeProvider active inShell>
-        <Sidebar {...sidebarProps} />
+        <Sidebar {...sidebarProps} onResumeSetup={onResumeSetup} />
         <div data-testid="content">
           <NetworkWorkspace selectedTab="流量" onTabChange={vi.fn()} />
         </div>
@@ -241,4 +241,15 @@ it("offers retry after a refresh fails even when an older snapshot is cached", a
   );
   expect(reads).toBeGreaterThanOrEqual(3);
   view.unmount();
+});
+
+it("keeps resume setup in navigation and reachable when the sidebar is collapsed", async () => {
+  const resume = vi.fn();
+  mount(resume);
+  const menu = screen.getByTestId("secondary-navigation");
+  fireEvent.click(within(menu).getByRole("button", { name: "继续接入" }));
+  expect(resume).toHaveBeenCalledOnce();
+  fireEvent.click(within(menu).getByRole("button", { name: "nav.collapseSidebar" }));
+  fireEvent.click(within(menu).getByRole("button", { name: "继续接入" }));
+  expect(resume).toHaveBeenCalledTimes(2);
 });

@@ -1,0 +1,25 @@
+{
+  "scope": "planning documents only",
+  "requirements": 23,
+  "scenarios": 63,
+  "tasks": 24,
+  "local_links_checked": 30,
+  "dependency_dag": "acyclic",
+  "errors": [],
+  "files_sha256": {
+    "acceptance.md": "7ae481c1a497f6b5caca71eef1ea279f35f8632c3fb2b0ac71db3d07aba8b40f",
+    "brief.md": "6be81e7bd8a123944e135066026ff1a192e119d27aab81ef4efe87b4bf58ece6",
+    "design.md": "9bc4b7d8d8744a848b7a505e897ba639d1923210ddf36cbc388cb43f937729b1",
+    "proposal.md": "27ce78275df2cfc37c09a63075970d4b53eca903e6626e17ede0ced3a1ef1496",
+    "specs/ai-tools/spec.md": "43af71b0250afc04d73f595ab81d36355782bd34c3ce7c78045f68151203ed37",
+    "specs/budget-controls/spec.md": "420ffd9896d23f26f2cc7d6962193c3c97b278238af92ee288cb02b73fd6b37a",
+    "specs/data-lifecycle/spec.md": "96d9896b122f31f5ecccc83fba33da45ebd210c61a92067187036600e64cee51",
+    "specs/desktop-shell/spec.md": "950106a4a34235bfe26d59a38693f2713b4a31fceadf8e7fd1167bd59f9205ca",
+    "specs/integration-runtime/spec.md": "e2793c4bea66efc10ce08fe3229ba5bd5a9cfc0ae500b66450a32f1be6c8e65d",
+    "specs/model-routing/spec.md": "113c3892e033f8258a7184b0191c53b301bd00abf1706fe9d948aa39a524d7a6",
+    "specs/operational-reporting/spec.md": "4f8b62e98930f814e520a879df1025aa08c2120933799e33769eb5131823cd7c",
+    "specs/project-environments/spec.md": "11b4a843ea2aaf8792c968877ea1faa7f00e3daaf0974b340e32ec04d4935050",
+    "specs/workspace-readiness/spec.md": "cd9b0844490f19f77752cfc13b9bd0acf43392466029fec0d4422fa9a24618a1",
+    "tasks.md": "9e7c0bf196ae51f17179c7a19edc75ba43955b28be6a210d4f7d6f1e67146b17"
+  }
+}

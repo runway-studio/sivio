@@ -12,10 +12,16 @@ export function ModelHubPage({
   view,
   activeApp,
   onBusyChange,
+  onManageProviders,
+  onVerify,
+  commandSelection,
 }: {
+  onVerify?: (app: ProxyAppId) => void;
+  commandSelection?: { app: AppId; providerId: string; model: string };
   view: "modelPicker" | "routeDecisions";
   activeApp: AppId;
   onBusyChange: (busy: boolean) => void;
+  onManageProviders?: (app: ProxyAppId) => void;
 }) {
   const { t } = useTranslation();
   const app = PROXY_APP_IDS.includes(activeApp as ProxyAppId)
@@ -44,9 +50,16 @@ export function ModelHubPage({
         <div className="mx-auto w-full max-w-6xl p-6 [overflow-wrap:anywhere]">
           {view === "modelPicker" ? (
             <ModelPickerContent
-              key={app}
-              initialApp={pickerClient}
+              key={
+                commandSelection
+                  ? `${commandSelection.app}:${commandSelection.providerId}:${commandSelection.model}`
+                  : app
+              }
+              initialApp={commandSelection ? app : pickerClient}
+              initialSelection={commandSelection}
               onClientChange={setPickerClient}
+              onManageProviders={onManageProviders}
+              onVerify={onVerify}
               page
               setBusy={onBusyChange}
             />

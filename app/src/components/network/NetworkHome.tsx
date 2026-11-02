@@ -1,3 +1,6 @@
+import type { AppId } from "@/lib/api";
+import { coreStatusLabel } from "@/lib/workspaceReadiness";
+import { WorkspaceReadiness } from "@/components/overview/WorkspaceReadiness";
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -243,9 +246,11 @@ function Connectivity({
 }
 
 export function NetworkHome({
+  onManageProviders,
   snapshot,
   onNavigate,
 }: {
+  onManageProviders?: (app: AppId) => void;
   snapshot: NetworkSnapshot;
   onNavigate: (tab: NetworkTab) => void;
 }) {
@@ -428,6 +433,10 @@ export function NetworkHome({
   }
   return (
     <div className="network-home space-y-5">
+      <WorkspaceReadiness
+        onManageProviders={onManageProviders}
+        onManageNetwork={() => onNavigate("设置")}
+      />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">
@@ -886,7 +895,10 @@ export function NetworkHome({
                 : "—"}
             </Field>
             <Field label={tr("内核运行", "Core status")}>
-              {running ? tr("运行中", "Running") : tr("已停止", "Stopped")}
+              {coreStatusLabel(
+                snapshot.runtime.phase,
+                i18n.language.startsWith("zh"),
+              )}
             </Field>
             <Field label={tr("混合代理端口", "Mixed proxy port")}>
               {running ? snapshot.runtime.port : settings.mixedPort}

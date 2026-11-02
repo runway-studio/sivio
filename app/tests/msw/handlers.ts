@@ -48,6 +48,12 @@ const withJson = async <T>(request: Request): Promise<T> => {
 const success = <T>(payload: T) => HttpResponse.json(payload as any);
 
 export const handlers = [
+  http.post(`${TAURI_ENDPOINT}/get_workspace_readiness`, () =>
+    HttpResponse.json(
+      { message: "No readiness fixture configured" },
+      { status: 503 },
+    ),
+  ),
   http.post(`${TAURI_ENDPOINT}/network_command`, async ({ request }) => {
     const { action } = await withJson<{ action: string }>(request);
     if (action === "desktop.get")

@@ -413,7 +413,7 @@ impl Backend for ProcessBackend {
             .env("SI_ASSIST_CONTROL_DIRECTORY", self.dir.path())
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stderr(std::fs::File::create(self.dir.path().join("supervisor.stderr"))?)
             .spawn()?;
         let mut runtime = self.runtime.lock().await;
         runtime.child = Some(child);
@@ -421,7 +421,11 @@ impl Backend for ProcessBackend {
         runtime.generation += 1;
         runtime.socket = self.socket();
         runtime.port = Some(catalog.settings.mixed_port);
-        for _ in 0..60 {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+        while tokio::time::Instant::now() < deadline {
+            if let Some(status) = runtime.child.as_mut().unwrap().try_wait()? {
+                bail!("supervisor exited {status}: {}", std::fs::read_to_string(self.dir.path().join("supervisor.stderr")).unwrap_or_default());
+            }
             if control(&runtime, "GET", "/version", None).await.is_ok()
                 && port::listeners_ready(&catalog.settings).await
                 && port::dns_ready(&self.yaml(&catalog.settings)?).await
@@ -436,7 +440,7 @@ impl Backend for ProcessBackend {
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        bail!("real core did not become ready")
+        bail!("real core did not become ready: {}", std::fs::read_to_string(self.dir.path().join("supervisor.stderr")).unwrap_or_default())
     }
     async fn failed(&self, message: &str) {
         let mut runtime = self.runtime.lock().await;
@@ -448,9 +452,7 @@ impl Backend for ProcessBackend {
 #[tokio::test]
 #[ignore = "requires bundled core/supervisor and permission to run local listeners/sandbox-exec"]
 async fn real_core_live_apply_and_rollback_preserve_proxy_traffic() {
-    use std::io::Read as _;
     use std::net::{Ipv4Addr, TcpListener};
-    use std::os::unix::fs::PermissionsExt as _;
     use std::sync::atomic::Ordering;
     let free_port = || {
         TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
@@ -468,20 +470,17 @@ async fn real_core_live_apply_and_rollback_preserve_proxy_traffic() {
         .prefix("sivio-live-")
         .tempdir_in("/private/tmp")
         .unwrap();
-    let core = dir.path().join("mihomo");
-    let mut bytes = Vec::new();
-    flate2::read::GzDecoder::new(
-        std::fs::File::open(root.join("app/src-tauri/resources/network/mihomo.gz")).unwrap(),
-    )
-    .read_to_end(&mut bytes)
-    .unwrap();
-    assert_eq!(digest(&bytes), core_hash("stable").unwrap());
-    std::fs::write(&core, bytes).unwrap();
-    std::fs::set_permissions(&core, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let core = super::super::core_bundle::checked(
+        &root.join("app/src-tauri/resources/network/mihomo-cores.xz"),
+        &dir.path().join("cores"),
+        "stable",
+    ).unwrap();
     let backend = ProcessBackend {
         write: Mutex::new(()),
         core,
-        supervisor: root.join("build/cache/target/debug/si-network-supervisor"),
+        // Exercise the shipped supervisor. Debug SHA256 on large cores can exceed
+        // the old six-second fixture deadline on a memory-constrained build host.
+        supervisor: root.join("app/src-tauri/resources/network/si-network-supervisor"),
         dir,
         runtime: Default::default(),
         fail_save: false.into(),

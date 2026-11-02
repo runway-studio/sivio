@@ -1,0 +1,483 @@
+{
+  "requirements": {
+    "R03": {
+      "title": "可恢复的首次接入流程",
+      "path": "specs/ai-tools/spec.md",
+      "scenarios": [
+        {
+          "id": "R03.S1",
+          "title": "新用户完成接入",
+          "owner": "T04"
+        },
+        {
+          "id": "R03.S2",
+          "title": "中断后恢复",
+          "owner": "T04"
+        },
+        {
+          "id": "R03.S3",
+          "title": "旧用户升级",
+          "owner": "T04"
+        }
+      ]
+    },
+    "R04": {
+      "title": "模型选择的空状态与生效反馈",
+      "path": "specs/ai-tools/spec.md",
+      "scenarios": [
+        {
+          "id": "R04.S1",
+          "title": "无供应商或搜索无命中",
+          "owner": "T04"
+        },
+        {
+          "id": "R04.S2",
+          "title": "应用成功但客户端未读",
+          "owner": "T04"
+        },
+        {
+          "id": "R04.S3",
+          "title": "过期选择",
+          "owner": "T04"
+        }
+      ]
+    },
+    "R13": {
+      "title": "明确范围的预算设置",
+      "path": "specs/budget-controls/spec.md",
+      "scenarios": [
+        {
+          "id": "R13.S1",
+          "title": "非法值与零限额",
+          "owner": "T11"
+        },
+        {
+          "id": "R13.S2",
+          "title": "周期边界",
+          "owner": "T11"
+        }
+      ]
+    },
+    "R14": {
+      "title": "所有尝试的预算准入与未知费用",
+      "path": "specs/budget-controls/spec.md",
+      "scenarios": [
+        {
+          "id": "R14.S1",
+          "title": "达到限额后故障切换",
+          "owner": "T11"
+        },
+        {
+          "id": "R14.S2",
+          "title": "费用未知或数据库错误",
+          "owner": "T11"
+        },
+        {
+          "id": "R14.S3",
+          "title": "流式与重复结算",
+          "owner": "T11"
+        },
+        {
+          "id": "R14.S4",
+          "title": "派发持久边界",
+          "owner": "T19"
+        },
+        {
+          "id": "R14.S5",
+          "title": "未知费用的可操作处理",
+          "owner": "T11"
+        }
+      ]
+    },
+    "R15": {
+      "title": "预算提示与准确的方案归因",
+      "path": "specs/budget-controls/spec.md",
+      "scenarios": [
+        {
+          "id": "R15.S1",
+          "title": "阈值重启去重",
+          "owner": "T11"
+        },
+        {
+          "id": "R15.S2",
+          "title": "请求过程中切换方案",
+          "owner": "T19"
+        },
+        {
+          "id": "R15.S3",
+          "title": "价格修正",
+          "owner": "T11"
+        }
+      ]
+    },
+    "R18": {
+      "title": "对象级配置历史与来源差异",
+      "path": "specs/data-lifecycle/spec.md",
+      "scenarios": [
+        {
+          "id": "R18.S1",
+          "title": "查看网络增强变更",
+          "owner": "T15"
+        },
+        {
+          "id": "R18.S2",
+          "title": "历史保留",
+          "owner": "T15"
+        }
+      ]
+    },
+    "R19": {
+      "title": "预览绑定的选择恢复",
+      "path": "specs/data-lifecycle/spec.md",
+      "scenarios": [
+        {
+          "id": "R19.S1",
+          "title": "仅恢复一个对象",
+          "owner": "T16"
+        },
+        {
+          "id": "R19.S2",
+          "title": "目标或来源变化",
+          "owner": "T16"
+        },
+        {
+          "id": "R19.S3",
+          "title": "中断及缺秘密",
+          "owner": "T16"
+        },
+        {
+          "id": "R19.S4",
+          "title": "脱敏对象替换活动依赖",
+          "owner": "T16"
+        }
+      ]
+    },
+    "R20": {
+      "title": "恢复操作协调与私有材料",
+      "path": "specs/data-lifecycle/spec.md",
+      "scenarios": [
+        {
+          "id": "R20.S1",
+          "title": "并发写入",
+          "owner": "T14"
+        },
+        {
+          "id": "R20.S2",
+          "title": "恢复服务失败",
+          "owner": "T20"
+        },
+        {
+          "id": "R20.S3",
+          "title": "秘密和链接",
+          "owner": "T16"
+        }
+      ]
+    },
+    "R23": {
+      "title": "增量迁移与运行数据隔离",
+      "path": "specs/data-lifecycle/spec.md",
+      "scenarios": [
+        {
+          "id": "R23.S1",
+          "title": "旧库升级失败或降级",
+          "owner": "T01"
+        },
+        {
+          "id": "R23.S2",
+          "title": "配置恢复与消费",
+          "owner": "T16"
+        },
+        {
+          "id": "R23.S3",
+          "title": "完整灾备恢复",
+          "owner": "T16"
+        },
+        {
+          "id": "R23.S4",
+          "title": "预算启用的历史基线",
+          "owner": "T19"
+        }
+      ]
+    },
+    "R05": {
+      "title": "一致的常用工具展示与能力标签",
+      "path": "specs/desktop-shell/spec.md",
+      "scenarios": [
+        {
+          "id": "R05.S1",
+          "title": "老用户隐藏客户端",
+          "owner": "T05"
+        },
+        {
+          "id": "R05.S2",
+          "title": "新装无客户端",
+          "owner": "T05"
+        }
+      ]
+    },
+    "R06": {
+      "title": "受保护的应用内命令面板",
+      "path": "specs/desktop-shell/spec.md",
+      "scenarios": [
+        {
+          "id": "R06.S1",
+          "title": "键盘导航",
+          "owner": "T06"
+        },
+        {
+          "id": "R06.S2",
+          "title": "写入被保护",
+          "owner": "T06"
+        },
+        {
+          "id": "R06.S3",
+          "title": "秘密不入索引",
+          "owner": "T06"
+        }
+      ]
+    },
+    "R21": {
+      "title": "阶段与当前构建证据",
+      "path": "specs/integration-runtime/spec.md",
+      "scenarios": [
+        {
+          "id": "R21.S1",
+          "title": "最终包验证",
+          "owner": "T23"
+        },
+        {
+          "id": "R21.S2",
+          "title": "外部依赖缺失",
+          "owner": "T24"
+        }
+      ]
+    },
+    "R22": {
+      "title": "核心旅程与性能回归",
+      "path": "specs/integration-runtime/spec.md",
+      "scenarios": [
+        {
+          "id": "R22.S1",
+          "title": "完整核心旅程",
+          "owner": "T24"
+        },
+        {
+          "id": "R22.S2",
+          "title": "性能及并行网络",
+          "owner": "T24"
+        }
+      ]
+    },
+    "R07": {
+      "title": "能力约束先于路由策略",
+      "path": "specs/model-routing/spec.md",
+      "scenarios": [
+        {
+          "id": "R07.S1",
+          "title": "不兼容候选",
+          "owner": "T08"
+        },
+        {
+          "id": "R07.S2",
+          "title": "未知能力",
+          "owner": "T08"
+        },
+        {
+          "id": "R07.S3",
+          "title": "上下文边界",
+          "owner": "T08"
+        }
+      ]
+    },
+    "R08": {
+      "title": "同供应商多模型的独立候选",
+      "path": "specs/model-routing/spec.md",
+      "scenarios": [
+        {
+          "id": "R08.S1",
+          "title": "同账号两模型",
+          "owner": "T09"
+        },
+        {
+          "id": "R08.S2",
+          "title": "完全重复与迁移",
+          "owner": "T09"
+        }
+      ]
+    },
+    "R09": {
+      "title": "可解释的会话固定与游标归属",
+      "path": "specs/model-routing/spec.md",
+      "scenarios": [
+        {
+          "id": "R09.S1",
+          "title": "固定会话并发",
+          "owner": "T12"
+        },
+        {
+          "id": "R09.S2",
+          "title": "缺身份或固定成员失效",
+          "owner": "T12"
+        },
+        {
+          "id": "R09.S3",
+          "title": "响应游标重启或换成员",
+          "owner": "T12"
+        },
+        {
+          "id": "R09.S4",
+          "title": "绑定资源界限",
+          "owner": "T12"
+        },
+        {
+          "id": "R09.S5",
+          "title": "新旧保护设置与认证轮换",
+          "owner": "T12"
+        }
+      ]
+    },
+    "R16": {
+      "title": "可解释的运行质量指标",
+      "path": "specs/operational-reporting/spec.md",
+      "scenarios": [
+        {
+          "id": "R16.S1",
+          "title": "失败后成功与取消",
+          "owner": "T22"
+        },
+        {
+          "id": "R16.S2",
+          "title": "缺失指标",
+          "owner": "T22"
+        },
+        {
+          "id": "R16.S3",
+          "title": "旧数据不足",
+          "owner": "T22"
+        }
+      ]
+    },
+    "R17": {
+      "title": "报告关联与本地隐私边界",
+      "path": "specs/operational-reporting/spec.md",
+      "scenarios": [
+        {
+          "id": "R17.S1",
+          "title": "诊断与生产数据",
+          "owner": "T22"
+        },
+        {
+          "id": "R17.S2",
+          "title": "配置时间邻近",
+          "owner": "T22"
+        },
+        {
+          "id": "R17.S3",
+          "title": "保留与导出",
+          "owner": "T21"
+        }
+      ]
+    },
+    "R10": {
+      "title": "扩展现有方案并预览作用范围",
+      "path": "specs/project-environments/spec.md",
+      "scenarios": [
+        {
+          "id": "R10.S1",
+          "title": "旧方案与不支持字段",
+          "owner": "T17"
+        },
+        {
+          "id": "R10.S2",
+          "title": "预览过期或缺引用",
+          "owner": "T17"
+        }
+      ]
+    },
+    "R11": {
+      "title": "方案的可恢复应用",
+      "path": "specs/project-environments/spec.md",
+      "scenarios": [
+        {
+          "id": "R11.S1",
+          "title": "中途失败",
+          "owner": "T18"
+        },
+        {
+          "id": "R11.S2",
+          "title": "外部编辑与崩溃",
+          "owner": "T18"
+        },
+        {
+          "id": "R11.S3",
+          "title": "存在在途流",
+          "owner": "T18"
+        }
+      ]
+    },
+    "R12": {
+      "title": "请求级环境归属与出站隔离",
+      "path": "specs/project-environments/spec.md",
+      "scenarios": [
+        {
+          "id": "R12.S1",
+          "title": "切换期间在途与新请求",
+          "owner": "T19"
+        },
+        {
+          "id": "R12.S2",
+          "title": "受管出口失败",
+          "owner": "T19"
+        },
+        {
+          "id": "R12.S3",
+          "title": "归因能力不足",
+          "owner": "T19"
+        }
+      ]
+    },
+    "R01": {
+      "title": "按证据展示就绪状态",
+      "path": "specs/workspace-readiness/spec.md",
+      "scenarios": [
+        {
+          "id": "R01.S1",
+          "title": "内核运行但模型失败",
+          "owner": "T03"
+        },
+        {
+          "id": "R01.S2",
+          "title": "配置变化使证据失效",
+          "owner": "T03"
+        },
+        {
+          "id": "R01.S3",
+          "title": "显式出站无需系统代理",
+          "owner": "T03"
+        }
+      ]
+    },
+    "R02": {
+      "title": "可取消的端到端诊断",
+      "path": "specs/workspace-readiness/spec.md",
+      "scenarios": [
+        {
+          "id": "R02.S1",
+          "title": "单候选真实验证",
+          "owner": "T11"
+        },
+        {
+          "id": "R02.S2",
+          "title": "取消并重试",
+          "owner": "T02"
+        },
+        {
+          "id": "R02.S3",
+          "title": "不支持的客户端",
+          "owner": "T02"
+        }
+      ]
+    }
+  },
+  "scenario_count": 68
+}

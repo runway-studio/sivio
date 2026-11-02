@@ -1,0 +1,39 @@
+{
+  "scope": "planning only; no business tests/build/install/live calls performed",
+  "result": "PASS",
+  "requirements": 23,
+  "scenarios": 68,
+  "tasks": 24,
+  "capabilities": 9,
+  "stages": [
+    "A",
+    "B",
+    "C",
+    "D"
+  ],
+  "local_links_checked": 115,
+  "scenario_ownership": "one owner per scenario",
+  "participation_table": "matches current task references",
+  "dependency_dag": "acyclic",
+  "all_implementation_tasks_unchecked": true,
+  "git_scope": "only this new change directory",
+  "openspec_exit_code": 0,
+  "errors": [],
+  "main_document_sha256": {
+    "acceptance.md": "9cfc3a1b4ad6ab44f8b92e2c93d339558b3fac12ad00ab19928a80cfb0d82ca3",
+    "brief.md": "6be81e7bd8a123944e135066026ff1a192e119d27aab81ef4efe87b4bf58ece6",
+    "design.md": "eed001854e11033ead2b71aa88f81be64dd62dacfce6cf800c8a2db10eccae4d",
+    "proposal.md": "27ce78275df2cfc37c09a63075970d4b53eca903e6626e17ede0ced3a1ef1496",
+    "scenario-ownership.md": "e7418cedd590ed9f2ae4cf995868fb678c38f63713d6120cc2156fb282adbdce",
+    "specs/ai-tools/spec.md": "43af71b0250afc04d73f595ab81d36355782bd34c3ce7c78045f68151203ed37",
+    "specs/budget-controls/spec.md": "6f28ca3f4ed2c673b5516fccdada67d3af6219df2b68308a33185ae64e674e11",
+    "specs/data-lifecycle/spec.md": "a2c3563a7d13d247d7bfc967f60a3c6aa88ca0dffb97eb9b7f3cf4525a2e66dc",
+    "specs/desktop-shell/spec.md": "950106a4a34235bfe26d59a38693f2713b4a31fceadf8e7fd1167bd59f9205ca",
+    "specs/integration-runtime/spec.md": "e2793c4bea66efc10ce08fe3229ba5bd5a9cfc0ae500b66450a32f1be6c8e65d",
+    "specs/model-routing/spec.md": "a6ee2661b86e6b1ef9626d301349e5ec4fc38679661d29758a942bf1ae4419ef",
+    "specs/operational-reporting/spec.md": "8a79d17165914155ebc3a8d42e47eff74737d62ace8a532bf04ba7822a0967e4",
+    "specs/project-environments/spec.md": "b15d6ff56e78f0157e978ac2c7ba0536ad8cf6ae5258b18d4ba140730d36e423",
+    "specs/workspace-readiness/spec.md": "cd9b0844490f19f77752cfc13b9bd0acf43392466029fec0d4422fa9a24618a1",
+    "tasks.md": "1fea0d4ffdd7e93361883b305709e5ff61e7ef805cf79ff68ee0d83aa416efdb"
+  }
+}

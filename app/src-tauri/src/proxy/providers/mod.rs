@@ -12,6 +12,7 @@
 //! - `transform`: 格式转换
 
 mod adapter;
+pub(crate) mod diagnostic;
 mod auth;
 mod claude;
 mod codex;

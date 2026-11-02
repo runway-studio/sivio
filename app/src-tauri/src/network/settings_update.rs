@@ -370,6 +370,12 @@ pub(super) async fn save(
     } else {
         apply(&Live { app, state }, settings, revision).await
     };
+    if result.is_ok() && (start_if_stopped || take_over) {
+        let _write = state.write.lock().await;
+        if state.runtime.lock().await.phase == "running" {
+            service_setup::remember_running(true)?;
+        }
+    }
     let _ = app.emit("network-runtime-changed", ());
     result
 }

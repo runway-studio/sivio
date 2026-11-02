@@ -549,6 +549,28 @@ describe("App integration with MSW", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps the provider draft when command navigation is cancelled", async () => {
+    const { default: App } = await import("@/App");
+    renderApp(App);
+    await waitFor(() =>
+      expect(screen.getByTestId("provider-list")).toHaveTextContent("claude-1"),
+    );
+    fireEvent.click(screen.getByText("edit"));
+    fireEvent.input(screen.getByLabelText("edit-field"), {
+      target: { value: "keep draft" },
+    });
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    const input = await screen.findByRole("combobox", { name: "搜索命令" });
+    fireEvent.change(input, { target: { value: "设置" } });
+    fireEvent.click(await screen.findByRole("option", { name: "设置" }));
+    expect(await screen.findByTestId("confirm-message")).toHaveTextContent(
+      "common.unsavedLeaveMessage",
+    );
+    fireEvent.click(screen.getByText("cancel-delete"));
+    expect(screen.getByLabelText("edit-field")).toHaveValue("keep draft");
+    expect(screen.queryByTestId("settings-page")).not.toBeInTheDocument();
+  });
+
   it("asks before leaving an editor page with unsaved changes", async () => {
     const { default: App } = await import("@/App");
     renderApp(App);

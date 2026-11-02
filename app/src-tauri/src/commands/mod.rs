@@ -77,3 +77,5 @@ pub use workspace::*;
 
 mod model_picker;
 pub use model_picker::*;
+mod workspace_readiness;
+pub use workspace_readiness::*;
