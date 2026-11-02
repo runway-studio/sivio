@@ -102,6 +102,9 @@ def main():
     parser.add_argument('--assets', required=True)
     parser.add_argument('--publish', action='store_true', help='Otherwise create/update a draft only')
     args = parser.parse_args()
+    from privacy import Scanner
+    Scanner().source().history().require_clean()
+    Scanner().artifacts(args.assets).require_clean()
     config = json.loads((ROOT / 'app/src-tauri/release-config.json').read_text())
     manifest, expected = verify_local(args.assets, args.tag, args.sha, config)
     github = Github(config['repository'])

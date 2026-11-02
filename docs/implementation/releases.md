@@ -67,3 +67,11 @@ git push origin v0.2.0
 ## 当前交付边界
 
 代码与本地测试不等于 GitHub CI/原生升级验收。实际进度见 `openspec/changes/add-github-releases-and-app-updates/acceptance.md`。发布前仍需验证干净 runner、匿名资源访问、隔离 N→N+1、同签名 helper 行为；未执行项目保持 NOT_VERIFIED。
+
+## 发布隐私检查与原生升级验收
+
+发布前运行 `python3 scripts/release/privacy.py --source --history`；组装和发布阶段还扫描 ZIP/TAR 及嵌套压缩资源。检查内部地址、个人绝对路径、常见凭据格式和凭据/运行数据文件名。例外必须固定路径、规则和完整文件 SHA256，并说明公开测试夹具来源；不能豁免整个第三方目录。诊断仅输出路径和规则，不输出命中的值。这是静态防线，不能保证发现所有未知格式的秘密。
+
+源码包只收录 Git 跟踪且位于构建输入白名单中的文件；目录中的忽略文件、未跟踪文件和缓存均不会随包发布，归档不保存本机用户/组元数据。新的项目提交使用 GitHub noreply 邮箱。
+
+`Native upgrade validation` 工作流只在一次性 macOS runner 运行。先构建带编译期驱动的 0.1.0 测试宿主，再通过正式更新实现下载已发布的 RC 包、验签、安装和重启到不含驱动的目标 App。驱动覆盖请求失败、篡改包拒绝、活动网络清理，以及重启后数据与网络恢复。测试宿主不能通过正式发布门禁；测试 RC 不进入 stable feed。TUN 与 UI 点击交互仍单独验收。

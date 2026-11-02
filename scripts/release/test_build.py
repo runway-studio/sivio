@@ -4,6 +4,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+import subprocess
 from unittest.mock import patch
 from version import ROOT
 from sign import identity
@@ -28,6 +29,10 @@ class ReleaseBuild(unittest.TestCase):
                 file = root / name
                 file.parent.mkdir(parents=True, exist_ok=True)
                 file.write_text('fixture')
+            subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            subprocess.run(['git', 'add', '.'], cwd=root, check=True)
+            for name in ['app/.env', 'docs/untracked-secret', 'app/src/local-untracked.ts']:
+                (root / name).write_text('must never ship')
             with patch.object(build, 'ROOT', root):
                 archive, _ = build.package_source(root / 'out', 'Sivio', '0.2.0')
             with tarfile.open(archive) as tar:
@@ -37,3 +42,6 @@ class ReleaseBuild(unittest.TestCase):
             self.assertIn('vendor/dependency-notices/pkg/LICENSE', names)
             self.assertIn('vendor/cores/pinned.gz', names)
             self.assertFalse(any('private' in name for name in names))
+            self.assertFalse(any('untracked' in name or '.env' in name for name in names))
+            with tarfile.open(archive) as tar:
+                self.assertTrue(all(m.uname == '' and m.gname == '' and m.uid == 0 for m in tar))

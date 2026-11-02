@@ -1,0 +1,464 @@
+[
+  {
+    "path": "app/src-tauri/src/app_updates.rs",
+    "sha256": "2077225016b072ec7c0fcb1d75bd50328ac1314bed4e1342a8307c7fe8173e67",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/app_updates.rs",
+    "sha256": "6d59721dee79bf75f69080d9954f7357cbc9228811c61cc0890da5c4250c9296",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/auto_launch.rs",
+    "sha256": "0995b16a5f0486ac6b2603bbbc8ecdd54960c1a1805e988aae3a021428252c1a",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/codex_config.rs",
+    "sha256": "6201bdfcddc189a26d90a210e93e3db19b0f7b1b4cfeb63eaacef8f82298bf17",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/deeplink/icon_fetch.rs",
+    "sha256": "031876ad1f3cad65d6fb78677c450ad939357d399a0e77c148138d35345712c7",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/lib.rs",
+    "sha256": "9f074548a91eb1857ecad208523761ba99b1fbc13579b89b200164ca765d0852",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/lib.rs",
+    "sha256": "ded806bdeb911af809c79db8e3bb94b4b7d5f91db83bacafba832c76700514c4",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/lib.rs",
+    "sha256": "f9398d38a2031cc893f15271b5912a33f4ac03d06b11cba3d878c37281a96fe9",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/network/delay/tests.rs",
+    "sha256": "751aa37777a13b2821fe8e0c2d8498bf900d5a133a8de17bd7150ab8e06441cc",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/network/repository.rs",
+    "sha256": "dd7c0762bc4eb7d5f8afe995bc6f1f49a0ed80c96e838287622b809383291625",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/portable_credentials.rs",
+    "sha256": "26709cb16942e12289dac9e14f01dd129a80eb7b47e747c40eb768f4db6a861a",
+    "rules": [
+      "access-token",
+      "private-key",
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/prompt_files.rs",
+    "sha256": "806a102f539db7574b2683229bbdd741613ad706c2f410b7737496ac22190fce",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/proxy/http_client.rs",
+    "sha256": "a1ea5ba6199b27da2cf5cd6b0657968c6d88f5749a7208e68d948d2eb55e5c9f",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/services/routing_groups/quota.rs",
+    "sha256": "bfa7472c90679a9772702e5ed91a496755a947b8217ff05e057786a23a5f75cb",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/services/s3.rs",
+    "sha256": "f0894105d736c3be2910f02ce4610a07d83aad2860f1385fa6fef569fd15b594",
+    "rules": [
+      "access-token"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/services/webdav.rs",
+    "sha256": "e51b1bc2dc0ba1b4a14d95c3d1ad270d45b0b5544b51fdd8be05f466477ebfdc",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src/utils/deeplinkRisk.test.ts",
+    "sha256": "15b88f5c6a3b5bbf52978f572091b9b5f4a1df53d03650ecd4b2c4eea7cc3b2d",
+    "rules": [
+      "access-token"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/tests/components/SessionReader.test.tsx",
+    "sha256": "767374d03aeed31f4c2ed75bd010ec0b5162324fc98b0df8bb80531de2686f0f",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/tests/components/SkillsStorageSheet.test.tsx",
+    "sha256": "bb051dffb7f556a44c294bfe6670d5a24c239591fca83851654217290905c6fa",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/tests/components/sessions/reader/toolSummary.test.ts",
+    "sha256": "004cb18942ee5c41ce371dc5f66781750ae4932b46075ad264cb0c29da178828",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/tests/fixtures/sessions/claude.messages.json",
+    "sha256": "cf9240c3cd1c31f96fedbbd2780eafc67334e4f976a2498461e2e245da1e52cc",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/tests/fixtures/sessions/codex.messages.json",
+    "sha256": "e2fca29edd07001b7e22e0adf01d0604859427fd24c81c4b59776377299b0cf1",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/tests/fixtures/sessions/gemini.messages.json",
+    "sha256": "9948abb9a0f5ccf17e295b19fcffac8ac3f3a137992064322e2aff4600bffec3",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/tests/fixtures/sessions/opencode.messages.json",
+    "sha256": "bd7b7bab05f0e767d513a2a09fee20594cf21dc655c6262597f528517c172f59",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/tests/fixtures/sessions/pi.messages.json",
+    "sha256": "1643cfca08ac59c2ac759cbb4808e4ddb73297501b80c88012c4fceab3ab96d6",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/tests/lib/frontendLogger.test.ts",
+    "sha256": "d639fa28fb29580fe395245397753414bb7f415d963269e89c606b02dba0694f",
+    "rules": [
+      "access-token",
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "docs/implementation/patches/cc-business-source.patch",
+    "sha256": "2ee0cf39319d5930180a4f49bc8cc2ef824ecf373756778a6f498abb8428e9bb",
+    "rules": [
+      "access-token",
+      "private-key",
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "native/helper/src/core/proxy.rs",
+    "sha256": "cd7b51eabd8e8155cc47548dc9b713fa2b2bf5b2f2b5d7ec1dc7a2d36a80baeb",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "native/log_redaction.rs",
+    "sha256": "28396235f724097fbf3e94c09ea19277a37ed27fda0d4a46e0a7bbdecf4b0767",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/src-tauri/src/auto_launch.rs",
+    "sha256": "065a4a03e40e391bc30daefa1a160f2ce1df629fbbe0ce8d8446200e7b160be2",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/src-tauri/src/codex_config.rs",
+    "sha256": "d315e20f027fcf1a80d392ff894022e251fe2f22c228c7dade9a091568cf5a72",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/src-tauri/src/deeplink/icon_fetch.rs",
+    "sha256": "031876ad1f3cad65d6fb78677c450ad939357d399a0e77c148138d35345712c7",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/src-tauri/src/lib.rs",
+    "sha256": "443c719ec07679144a2b622915adbb0c57c771cbb2fe1f4fa51dcda15313d9d9",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/src-tauri/src/prompt_files.rs",
+    "sha256": "806a102f539db7574b2683229bbdd741613ad706c2f410b7737496ac22190fce",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/src-tauri/src/proxy/http_client.rs",
+    "sha256": "bfa371a2e4da3b5feb1fcaefb4b1699b9f9ce4f29df88d10faa5c4a29d1b04a2",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/src-tauri/src/services/s3.rs",
+    "sha256": "a905bd79ce65cc0ecf213b0d3b7d907034add00e9d9bfb7f907a8c5b32d1c1ad",
+    "rules": [
+      "access-token"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/src-tauri/src/services/webdav.rs",
+    "sha256": "1d0636f21f60880b7d6d28e6523fc6db6eb84c79614c2e7993130c5db1526dff",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/src/utils/deeplinkRisk.test.ts",
+    "sha256": "15b88f5c6a3b5bbf52978f572091b9b5f4a1df53d03650ecd4b2c4eea7cc3b2d",
+    "rules": [
+      "access-token"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/tests/components/SessionReader.test.tsx",
+    "sha256": "767374d03aeed31f4c2ed75bd010ec0b5162324fc98b0df8bb80531de2686f0f",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/tests/components/SkillsStorageSheet.test.tsx",
+    "sha256": "1bb3c39db08a56ebf6028117e23ff10c9d464c869180bb109f0b1f8a206bd88a",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/tests/components/sessions/reader/toolSummary.test.ts",
+    "sha256": "004cb18942ee5c41ce371dc5f66781750ae4932b46075ad264cb0c29da178828",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/tests/fixtures/sessions/claude.messages.json",
+    "sha256": "cf9240c3cd1c31f96fedbbd2780eafc67334e4f976a2498461e2e245da1e52cc",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/tests/fixtures/sessions/codex.messages.json",
+    "sha256": "e2fca29edd07001b7e22e0adf01d0604859427fd24c81c4b59776377299b0cf1",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/tests/fixtures/sessions/gemini.messages.json",
+    "sha256": "9948abb9a0f5ccf17e295b19fcffac8ac3f3a137992064322e2aff4600bffec3",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/tests/fixtures/sessions/opencode.messages.json",
+    "sha256": "bd7b7bab05f0e767d513a2a09fee20594cf21dc655c6262597f528517c172f59",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/tests/fixtures/sessions/pi.messages.json",
+    "sha256": "1643cfca08ac59c2ac759cbb4808e4ddb73297501b80c88012c4fceab3ab96d6",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/cc-switch/tests/lib/frontendLogger.test.ts",
+    "sha256": "d639fa28fb29580fe395245397753414bb7f415d963269e89c606b02dba0694f",
+    "rules": [
+      "access-token",
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/clash-verge-rev/src-tauri/src/utils/dirs.rs",
+    "sha256": "fd3f4399675bcd72b57e1f37fec6b576d41d61671f486da792a934a7aa8a5f03",
+    "rules": [
+      "personal-home"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/clash-verge-service-ipc/src/core/proxy.rs",
+    "sha256": "47deeddc374bf57483503e75e8849c59db208f7e29ff6a1663f47baf9906fcaf",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/mihomo-alpha/docs/config.yaml",
+    "sha256": "e57eea09cdfb1851acf2cf130b6ef318827ac02fb6c2ebc64e2c77647e21a363",
+    "rules": [
+      "private-key"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/mihomo-alpha/test/config/example.org-key.pem",
+    "sha256": "524bfed27a2212c0574e6a22edb7fcbebcb16d2d125a2c6eb602cc2ed2e4a3c3",
+    "rules": [
+      "private-key"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/mihomo-alpha/transport/openvpn/config_test.go",
+    "sha256": "0c652ff75e9644ef94822227966079f036bf0cc55d12ecf673801b4435e3bdf5",
+    "rules": [
+      "private-key"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/mihomo-stable/docs/config.yaml",
+    "sha256": "e57eea09cdfb1851acf2cf130b6ef318827ac02fb6c2ebc64e2c77647e21a363",
+    "rules": [
+      "private-key"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/mihomo-stable/test/config/example.org-key.pem",
+    "sha256": "524bfed27a2212c0574e6a22edb7fcbebcb16d2d125a2c6eb602cc2ed2e4a3c3",
+    "rules": [
+      "private-key"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "vendor/upstream/mihomo-stable/transport/openvpn/config_test.go",
+    "sha256": "0c652ff75e9644ef94822227966079f036bf0cc55d12ecf673801b4435e3bdf5",
+    "rules": [
+      "private-key"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/lib.rs",
+    "sha256": "5d226e3c59941fe890a85d09cda08a23fca1faafafef73bf05786743c03b6aff",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "app/src-tauri/src/app_updates.rs",
+    "sha256": "2eb9f7e77d63dc40060b91d32a55441224061e017275060d8be9ce86cad0a434",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  }
+]

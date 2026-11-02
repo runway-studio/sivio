@@ -90,6 +90,8 @@ def assemble(report_path, tag, notes, output):
         raise ValueError('Release public key does not match the application')
     if report['signing'] != 'stable-internal' or report['version'] != version:
         raise ValueError('Invalid release identity/version')
+    if report.get('validationDriver', False):
+        raise ValueError('Validation-driver bundles cannot be published')
     if report.get('sourceDirty', True):
         raise ValueError('Uncommitted source is not a publishable release')
     if not re.fullmatch('[0-9a-f]{40}', report['sourceSha']):
@@ -119,6 +121,8 @@ def assemble(report_path, tag, notes, output):
     (output / 'release-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
     names = sorted([*assets, 'latest.json', 'release-notes.md', 'release-evidence.json'])
     (output / 'SHA256SUMS').write_text(''.join(f'{sha(output / name)}  {name}\n' for name in names))
+    from privacy import Scanner
+    Scanner().artifacts(output).require_clean()
     return manifest
 
 

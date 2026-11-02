@@ -34,12 +34,18 @@ def package_source(output, product, version):
  staging=output/f'.{product}-source-{uuid.uuid4().hex}.tar.gz'
  try:
   with tarfile.open(staging,'w:gz') as archive:
-   for folder in ['app','native','scripts','openspec','docs','vendor/upstream','vendor/dependency-notices','vendor/cores','.github']:
-    def include(info):
-     excluded={'node_modules','.git','target','dist','resources','__pycache__'}
-     return None if excluded.intersection(Path(info.name).parts) else info
-    if (ROOT/folder).exists(): archive.add(ROOT/folder,arcname=folder,filter=include)
-   for file in ['README.md','LICENSE','.cargo/config.toml','.gitignore','build/reports/upstream-manifest.json']: archive.add(ROOT/file,arcname=file)
+   folders=['app','native','scripts','openspec','docs','vendor/upstream','vendor/dependency-notices','vendor/cores','.github']
+   files={'README.md','LICENSE','.cargo/config.toml','.gitignore','build/reports/upstream-manifest.json'}
+   tracked=subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\0')
+   def normalize(info):
+    info.uid=info.gid=0;info.uname=info.gname='';info.pax_headers={};info.mtime=0
+    return info
+   for name in sorted(filter(None,tracked)):
+    if name not in files and not any(name.startswith(folder+'/') for folder in folders): continue
+    if {'node_modules','.git','target','dist','resources','__pycache__'}.intersection(Path(name).parts): continue
+    path=ROOT/name
+    if path.is_symlink(): raise ValueError('Source package cannot contain symlinks')
+    if path.is_file(): archive.add(path,arcname=name,recursive=False,filter=normalize)
   digest=hashlib.sha256(staging.read_bytes()).hexdigest()
   destination=output/f'{product}-{version}-source-{digest[:12]}.tar.gz'
   staging.replace(destination)
@@ -68,8 +74,9 @@ def copy_versioned_bundle(source,output):
  shutil.copytree(source,destination,symlinks=True)
  return destination
 def main():
- parser=argparse.ArgumentParser();parser.add_argument('--arch',choices=['aarch64','x86_64'],default='aarch64');parser.add_argument('--skip-helper-build',action='store_true');parser.add_argument('--release-distribution',action='store_true');parser.add_argument('--debug',action='store_true',help='Build an unoptimized development bundle instead of the default release bundle');args=parser.parse_args()
+ parser=argparse.ArgumentParser();parser.add_argument('--arch',choices=['aarch64','x86_64'],default='aarch64');parser.add_argument('--skip-helper-build',action='store_true');parser.add_argument('--release-distribution',action='store_true');parser.add_argument('--debug',action='store_true',help='Build an unoptimized development bundle instead of the default release bundle');parser.add_argument('--upgrade-validation',action='store_true');args=parser.parse_args()
 
+ if args.upgrade_validation and (args.release_distribution or os.environ.get('GITHUB_ACTIONS')!='true'): raise RuntimeError('Native validation driver is restricted to disposable CI builds')
  if args.release_distribution and (args.debug or args.arch!='aarch64'): raise RuntimeError('Release distribution requires release Apple Silicon build')
  source_sha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
  source_dirty=bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=normal'],cwd=ROOT))
@@ -109,7 +116,7 @@ def main():
  source_dirty=source_dirty or bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=normal'],cwd=ROOT))
  source_archive,source_digest=package_source(output,config['productName'],config['version'])
  (legal/'SOURCE.txt').write_text(f'Corresponding source for this exact Sivio build is supplied separately at the same download location, at no additional charge.\nFile: {source_archive.name}\nSHA256: {source_digest}\nRedistributors must preserve equivalent access to the corresponding source and all license notices.\nThe source archive is not needed to run the App offline.\n',encoding='utf-8')
- call(['pnpm','tauri','build']+(['--debug'] if args.debug else [])+['--features','custom-protocol','--bundles','app']+(['--target',target] if cross else []),f'app-{args.arch}-package.log',env,ROOT/'app')
+ call(['pnpm','tauri','build']+(['--debug'] if args.debug else [])+['--features','custom-protocol'+(',upgrade-validation' if args.upgrade_validation else ''),'--bundles','app']+(['--target',target] if cross else []),f'app-{args.arch}-package.log',env,ROOT/'app')
  product=config['productName'];version=config['version']
  source=ROOT/'build/cache/target'/(target if cross else '')/profile/'bundle/macos'/f'{product}.app';output=ROOT/'dist'/f'{"release" if args.release_distribution else "internal"}-{args.arch}'
  destination=copy_versioned_bundle(source,output)
@@ -118,7 +125,7 @@ def main():
   verify_runtime_libraries(destination/'Contents/Resources/network'/name)
  signing_spec=importlib.util.spec_from_file_location('sivio_internal_signing',ROOT/'scripts/internal-signing.py')
  signing_module=importlib.util.module_from_spec(signing_spec);signing_spec.loader.exec_module(signing_module)
- if args.release_distribution:
+ if args.release_distribution or args.upgrade_validation:
   sys.path.insert(0,str(ROOT/'scripts/release'))
   from sign import sign_bundle
   sign_bundle(destination,os.environ['SIVIO_CODESIGN_IDENTITY'],os.environ['SIVIO_CODESIGN_KEYCHAIN'],config['identifier'])
@@ -136,7 +143,7 @@ def main():
  with tarfile.open(update_staging,'w:gz') as archive:archive.add(destination,arcname=destination.name)
  update_staging.replace(update_path)
  report={'app':str(destination.relative_to(ROOT)),'archive':str(zip_path.relative_to(ROOT)),'sha256':hashlib.sha256(zip_path.read_bytes()).hexdigest(),'updaterArtifact':str(update_path.relative_to(ROOT)),'updaterSha256':hashlib.sha256(update_path.read_bytes()).hexdigest(),'updaterSignature':'not-generated; own channel remains unconfigured','architecture':args.arch,'frontendProtocol':'custom-protocol (embedded assets)','frontendEntrySha256':hashlib.sha256((ROOT/'app/dist/index.html').read_bytes()).hexdigest(),'signing':signing_info['kind'],'notarized':False,'fullAcceptance':'not-passed','intelPhysicalAcceptance':'not-passed','builtAt':time.time()}
- report.update(buildProfile=profile,appBytes=sum(p.stat().st_size for p in destination.rglob('*') if p.is_file()),archiveBytes=zip_path.stat().st_size)
+ report.update(validationDriver=args.upgrade_validation,buildProfile=profile,appBytes=sum(p.stat().st_size for p in destination.rglob('*') if p.is_file()),archiveBytes=zip_path.stat().st_size)
  report.update(sourceArchive=str(source_archive.relative_to(ROOT)),sourceSha256=source_digest,coreArchive='network/mihomo-cores.xz')
  if args.release_distribution:
   from sign import sign_update

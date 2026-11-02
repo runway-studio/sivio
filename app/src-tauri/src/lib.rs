@@ -1,3 +1,5 @@
+#[cfg(feature = "upgrade-validation")]
+mod upgrade_validation;
 #[cfg(unix)]
 use libc;
 mod app_config;
@@ -1487,6 +1489,8 @@ pub fn run() {
             }
 
 
+            #[cfg(feature = "upgrade-validation")]
+            upgrade_validation::start(app.handle());
             Ok(())
         })
         .invoke_handler(|invoke: tauri::ipc::Invoke<tauri::Wry>| {

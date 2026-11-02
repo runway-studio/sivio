@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from version import ROOT, check
 from sign import identity, probe_identity
+from privacy import Scanner
 
 
 def main():
@@ -15,6 +16,7 @@ def main():
     parser.add_argument('--validate-only', action='store_true', help='Validate a clean commit without requiring or creating its version tag')
     args = parser.parse_args()
     check(args.tag)
+    Scanner().source().history().require_clean()
     head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     tagged = head if args.validate_only else subprocess.check_output(['git', 'rev-parse', args.tag + '^{commit}'], cwd=ROOT, text=True).strip()
     if head != tagged or subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=normal'], cwd=ROOT):

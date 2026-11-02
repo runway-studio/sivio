@@ -369,6 +369,18 @@ pub async fn install(app: &tauri::AppHandle, id: &str) -> Result<bool, String> {
     }
 }
 
+/// Corrupt/restore only the already downloaded disposable CI candidate.
+#[cfg(feature = "upgrade-validation")]
+pub(crate) fn validation_flip_candidate(id: &str) -> Result<(), String> {
+    let registry = lock_candidate();
+    let candidate = valid_candidate(&registry, id, &crate::update_channel::current()?.revision)?;
+    let path = candidate.ready.as_ref().ok_or("no downloaded candidate")?.path();
+    let mut bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let last = bytes.last_mut().ok_or("empty candidate")?;
+    *last ^= 1;
+    std::fs::write(path, bytes).map_err(|e| e.to_string())
+}
+
 fn validate_identity(
     actual_id: &str,
     actual_revision: &str,
