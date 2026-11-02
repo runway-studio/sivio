@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 from version import ROOT, check
-from sign import identity
+from sign import identity, probe_identity
 
 
 def main():
@@ -31,9 +31,11 @@ def main():
     for channel in ['stable', 'alpha']:
         subprocess.run([sys.executable, 'scripts/fetch-mihomo.py', '--arch', 'aarch64-apple-darwin', '--channel', channel], cwd=ROOT, check=True)
     with identity() as (fingerprint, keychain):
+        probe_identity(fingerprint, keychain)
+        print('Stable macOS signing identity verified on this runner', flush=True)
         env.update(SIVIO_CODESIGN_IDENTITY=fingerprint, SIVIO_CODESIGN_KEYCHAIN=keychain)
         subprocess.run([sys.executable, 'scripts/build-app.py', '--arch', 'aarch64', '--release-distribution'], cwd=ROOT, env=env, check=True)
-    if subprocess.check_output(['git', 'diff', '--name-only'], cwd=ROOT):
+    if subprocess.check_output(['git', 'diff', '--name-only'], cwd=ROOT) or subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip() != head:
         raise SystemExit('Build changed tracked source; refusing publication')
 
 

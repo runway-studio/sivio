@@ -71,6 +71,8 @@ def main():
  parser=argparse.ArgumentParser();parser.add_argument('--arch',choices=['aarch64','x86_64'],default='aarch64');parser.add_argument('--skip-helper-build',action='store_true');parser.add_argument('--release-distribution',action='store_true');parser.add_argument('--debug',action='store_true',help='Build an unoptimized development bundle instead of the default release bundle');args=parser.parse_args()
 
  if args.release_distribution and (args.debug or args.arch!='aarch64'): raise RuntimeError('Release distribution requires release Apple Silicon build')
+ source_sha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+ source_dirty=bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=normal'],cwd=ROOT))
  (ROOT/'build/reports').mkdir(parents=True,exist_ok=True)
  profile='debug' if args.debug else 'release'
  cargo_profile=[] if args.debug else ['--release']
@@ -102,6 +104,7 @@ def main():
  config=json.loads((ROOT/'app/src-tauri/tauri.conf.json').read_text());config['bundle']['resources']={'resources/network/':'network/','resources/legal/':'legal/'}
  (ROOT/'app/src-tauri/tauri.conf.json').write_text(json.dumps(config,ensure_ascii=False,indent=2)+'\n')
  output=ROOT/'dist'/f'{"release" if args.release_distribution else "internal"}-{args.arch}'
+ source_dirty=source_dirty or bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=normal'],cwd=ROOT))
  source_archive,source_digest=package_source(output,config['productName'],config['version'])
  (legal/'SOURCE.txt').write_text(f'Corresponding source for this exact Sivio build is supplied separately at the same download location, at no additional charge.\nFile: {source_archive.name}\nSHA256: {source_digest}\nRedistributors must preserve equivalent access to the corresponding source and all license notices.\nThe source archive is not needed to run the App offline.\n',encoding='utf-8')
  call(['pnpm','tauri','build']+(['--debug'] if args.debug else [])+['--features','custom-protocol','--bundles','app']+(['--target',target] if cross else []),f'app-{args.arch}-package.log',env,ROOT/'app')
@@ -141,6 +144,7 @@ def main():
   sig=sign_update(update_path,version,ROOT)
   release_config=json.loads((ROOT/'app/src-tauri/release-config.json').read_text())
   verify(update_path,sig,release_config['publicKey'])
-  report.update(sourceDirty=bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=normal'],cwd=ROOT)),version=version,sourceSha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),publicKey=release_config['publicKey'],signature=str(sig.relative_to(ROOT)),signatureSha256=hashlib.sha256(sig.read_bytes()).hexdigest(),updaterSignature='verified',pubDate=datetime.now(timezone.utc).isoformat())
+  source_dirty=source_dirty or bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=normal'],cwd=ROOT)) or subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()!=source_sha
+  report.update(sourceDirty=source_dirty,version=version,sourceSha=source_sha,publicKey=release_config['publicKey'],signature=str(sig.relative_to(ROOT)),signatureSha256=hashlib.sha256(sig.read_bytes()).hexdigest(),updaterSignature='verified',pubDate=datetime.now(timezone.utc).isoformat())
  (ROOT/'build/reports'/f'app-{args.arch}-artifact.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n');print(json.dumps(report,ensure_ascii=False,indent=2))
 if __name__=='__main__':main()

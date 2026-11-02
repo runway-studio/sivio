@@ -59,6 +59,16 @@ def identity():
             subprocess.run(['security', 'delete-keychain', str(keychain)], capture_output=True)
 
 
+def probe_identity(fingerprint, keychain):
+    """Fail before an expensive build if the runner cannot use the stable identity."""
+    with tempfile.TemporaryDirectory(prefix='sivio-signing-probe-') as directory:
+        source, binary = Path(directory) / 'probe.c', Path(directory) / 'probe'
+        source.write_text('int main(void) { return 0; }\n')
+        run(['/usr/bin/clang', source, '-o', binary])
+        run(['/usr/bin/codesign', '--force', '--sign', fingerprint, '--keychain', keychain, '--identifier', 'local.siassist.signing-probe', binary])
+        run(['/usr/bin/codesign', '--verify', '--strict', '--test-requirement', '=certificate leaf = H"' + fingerprint + '"', binary])
+
+
 def sign_bundle(app, fingerprint, keychain, identifier):
     binaries = app / 'Contents/Resources/network'
     for name in ['clash-verge-service', 'clash-verge-service-install', 'clash-verge-service-uninstall', 'si-helper-control', 'si-network-supervisor']:

@@ -81,6 +81,16 @@ jobs:
           path: dist/release-assets/
           if-no-files-found: error
           retention-days: 7
+      - name: Upload build diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sivio-release-build-logs
+          path: |
+            build/reports/*-package.log
+            build/reports/*-dependencies.log
+          if-no-files-found: ignore
+          retention-days: 7
   publish:
     needs: build
     if: github.event_name == 'push' || !inputs.validate_only
