@@ -1,0 +1,105 @@
+{
+  "targetVersion": "0.1.1-rc.2",
+  "testHostVersion": "0.1.0",
+  "testHost": "same production backend with a compile-time CI driver",
+  "status": "passed",
+  "targetSourceSha": "97a87569a8ad255f622401bf6e1abf6df54dff51",
+  "observerBefore": {
+    "code": 0,
+    "message": "Success",
+    "data": {
+      "is_active": true,
+      "active_generation": 1,
+      "service_state": "Running",
+      "core_pid": 15665,
+      "core_started_at": 1793617688,
+      "last_core_exit_reason": null,
+      "restart_count": 0,
+      "last_recovery_at": null,
+      "desired_core_should_be_running": true,
+      "desired_generation": 1,
+      "desired_updated_at": 1793617688
+    }
+  },
+  "oldPid": 15380,
+  "newPids": [
+    15685
+  ],
+  "oldExecutableSha256": "1c2893dd363893e7016fac955eb4b0b96565134e9d09af1c08bd3753078cf5ea",
+  "newExecutableSha256": "beceb811d072476bb3e6b98a23a01a8f544cfcb892c65ba9976926c3e070fbe2",
+  "installerSha256": "259cb49602f775b4690a9d3446c45ed37f5f915dcc83b84812f06f630e8585ec",
+  "signatureIdentity": "7795147A635CFD950B608FCA8C09E59554AFB0C2",
+  "databaseRecordPreserved": true,
+  "preferencesBytesPreserved": true,
+  "previousBundleRetained": true,
+  "oldCorePid": 15665,
+  "newCorePid": 15695,
+  "nativeRestart": true,
+  "managedNetworkResumed": true,
+  "httpsThroughResumedProxy": true,
+  "helperSignerAcceptedBefore": true,
+  "helperSignerAcceptedAfter": "inferred from successful managed-network recovery without reinstallation",
+  "failedHttpCheckPreservedApp": true,
+  "tamperedSignatureRejectedWithoutStoppingNetwork": true,
+  "limits": [
+    "UI clicking/unsaved-edit prompts are covered separately, not driven by this native harness.",
+    "TUN mode is not exercised; this run uses managed system proxy."
+  ],
+  "driverEvents": [
+    {
+      "stage": "failed-check-preserved-app"
+    },
+    {
+      "stage": "before-upgrade",
+      "pid": 15380,
+      "version": "0.1.0",
+      "helperAuthorized": true,
+      "runtime": {
+        "phase": "running",
+        "generation": 1,
+        "error": null,
+        "managed": true,
+        "tun": false,
+        "proxyGuardTripped": false,
+        "port": 17890,
+        "active": "f3f6f564-0c98-4b8f-8da6-9866eb199ac1",
+        "tunVerification": "pending",
+        "intelAcceptance": "not-passed",
+        "media": null
+      },
+      "profileId": "f3f6f564-0c98-4b8f-8da6-9866eb199ac1"
+    },
+    {
+      "stage": "candidate",
+      "currentVersion": "0.1.0",
+      "availableVersion": "0.1.1-rc.2"
+    },
+    {
+      "stage": "progress",
+      "progress": "downloading"
+    },
+    {
+      "stage": "progress",
+      "progress": "verifying"
+    },
+    {
+      "stage": "progress",
+      "progress": "ready"
+    },
+    {
+      "stage": "verified-download"
+    },
+    {
+      "stage": "tampered-signature-rejected",
+      "networkStillRunning": true
+    },
+    {
+      "stage": "progress",
+      "progress": "installing"
+    },
+    {
+      "stage": "progress",
+      "progress": "restarting"
+    }
+  ]
+}

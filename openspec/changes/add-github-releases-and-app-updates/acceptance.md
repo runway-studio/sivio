@@ -1,5 +1,19 @@
 # Release/update acceptance — 2026-11-02
 
+## Privacy cleanup and native upgrade follow-up
+
+The sections below this follow-up preserve the initial-release evidence. Their original NOT_VERIFIED native-upgrade status is superseded by the successful run here; old release/CI downloads are pending retirement after the clean stable replacement is verified.
+
+- With explicit owner approval and a private local rollback bundle, ten commits were rewritten to remove internal npm mirror references, one personal absolute path and corporate author/committer emails. The affected packages were independently matched to public npm SHA512 integrities. Remote `main` and `v0.1.0` now use scanned history. Old SHA objects may remain retrievable through GitHub caches; this does not claim server-side erasure or deletion from other clones.
+- Source/history and recursive release-archive privacy gates passed. Source packaging admits only tracked build inputs and normalizes archive ownership. Exact path/hash/rule exceptions cover reviewed public upstream fixtures and scanner definitions. **15 release-script tests passed**, including rejection/redaction, modified exceptions and nested archives. The native validation feature also passed Rust compilation; OpenSpec strict and workflow syntax checks passed.
+- [v0.1.1-rc.2](https://github.com/runway-studio/sivio/releases/tag/v0.1.1-rc.2) was built, signed, scanned and anonymously verified in [run 41429576159](https://github.com/runway-studio/sivio/actions/runs/41429576159). It remains a prerelease outside the stable feed. Source: `97a87569a8ad255f622401bf6e1abf6df54dff51`.
+- **Real native upgrade PASSED** in [run 41432683035](https://github.com/runway-studio/sivio/actions/runs/41432683035). The disposable macOS ARM64 runner built a `0.1.0` test host using the production backend with a compile-time driver, then used the production check/download/verify/install/restart functions to install the published, uninstrumented `0.1.1-rc.2` App. This was not an upgrade of the developer's installed App or a claim about the exact original v0.1.0 executable bytes.
+- Process changed `15380 → 15685`; binary SHA256 changed `1c2893dd363893e7016fac955eb4b0b96565134e9d09af1c08bd3753078cf5ea → beceb811d072476bb3e6b98a23a01a8f544cfcb892c65ba9976926c3e070fbe2`. Deep/strict codesign and the original leaf certificate fingerprint passed. The synthetic database record and preference-file bytes survived, and the retained old bundle matched the pre-upgrade binary.
+- The real helper accepted the old App; the resumed App used the same helper installation and started a new managed core (`15665 → 15695`). HTTPS through the resumed proxy succeeded. Post-upgrade helper signer acceptance is inferred from that managed recovery without reinstallation. A missing HTTPS feed left the old executable unchanged; a deliberately corrupted downloaded candidate was rejected without stopping the running network.
+- Durable, synthetic-only evidence: [native-upgrade JSON](../../../docs/releases/validation/v0.1.1-rc.2-native.json). No production credentials or user data were used. Test-host builds cannot pass the formal release manifest gate.
+
+Limits: TUN, Intel, UI clicking and unsaved-edit prompts were not driven by this native run; prior targeted UI tests are separate evidence. Static scanning cannot prove absence of every unknown secret format. No live signing credential was found in the audited public assets; private signing material remains outside the distribution.
+
 ## Implemented and locally verified
 
 - Apple Silicon only; stable internal macOS identity plus a separate Tauri update identity. Private material stays in ignored caches and authorized GitHub Actions Secrets.
