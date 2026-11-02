@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Build the real Sivio single-host application with fixed network resources."""
-import argparse,gzip,hashlib,json,lzma,os,shutil,struct,subprocess,tarfile,time,importlib.util,uuid
+import argparse,gzip,hashlib,json,lzma,os,shutil,struct,subprocess,tarfile,time,importlib.util,uuid,sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 def prepare_core_bundle(net, target):
@@ -96,8 +96,10 @@ def main():
  for origin,license in [('cc-switch','LICENSE'),('clash-verge-rev','LICENSE'),('clash-verge-service-ipc','LICENSE'),('mihomo-stable','LICENSE'),('mihomo-alpha','LICENSE')]:
   shutil.copy2(ROOT/'vendor/upstream'/origin/license,legal/(origin+'-LICENSE'))
  shutil.copy2(ROOT/'docs/implementation/THIRD-PARTY-NOTICES.md',legal/'THIRD-PARTY-NOTICES.md')
- call(['cargo','fetch','--manifest-path','app/src-tauri/Cargo.toml','--target',target],f'app-{args.arch}-dependencies.log',env)
- call(['python3','scripts/collect-dependency-licenses.py','--target',target],f'licenses-{args.arch}-package.log',env)
+ # Offline metadata includes optional/dev packages that a normal binary build may not fetch.
+ for label,manifest in [('app','app/src-tauri/Cargo.toml'),('helper','native/helper/Cargo.toml'),('supervisor','native/supervisor/Cargo.toml')]:
+  call(['cargo','fetch','--locked','--manifest-path',manifest,'--target',target],f'{label}-{args.arch}-dependencies.log',env)
+ call([sys.executable,'scripts/collect-dependency-licenses.py','--target',target],f'licenses-{args.arch}-package.log',env)
  shutil.copy2(ROOT/'docs/implementation/mihomo-source-manifest.json',legal/'mihomo-source-manifest.json')
  for name in ['si-assist-corresponding-source.tar.gz','sivio-corresponding-source.tar.gz']:
   (legal/name).unlink(missing_ok=True)
@@ -117,7 +119,6 @@ def main():
  signing_spec=importlib.util.spec_from_file_location('sivio_internal_signing',ROOT/'scripts/internal-signing.py')
  signing_module=importlib.util.module_from_spec(signing_spec);signing_spec.loader.exec_module(signing_module)
  if args.release_distribution:
-  import sys
   sys.path.insert(0,str(ROOT/'scripts/release'))
   from sign import sign_bundle
   sign_bundle(destination,os.environ['SIVIO_CODESIGN_IDENTITY'],os.environ['SIVIO_CODESIGN_KEYCHAIN'],config['identifier'])

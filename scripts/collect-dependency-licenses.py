@@ -33,7 +33,7 @@ def main():
     for manifest in ['app/src-tauri/Cargo.toml','native/helper/Cargo.toml','native/supervisor/Cargo.toml']:
         command=['cargo','metadata','--offline','--format-version','1','--manifest-path',manifest,'--filter-platform',args.target]
         if manifest.startswith('native/helper'):command+=['--features','standalone,client']
-        result=json.loads(subprocess.check_output(command,cwd=ROOT,env=env,stderr=subprocess.PIPE))
+        result=json.loads(subprocess.check_output(command,cwd=ROOT,env=env))
         for package in result['packages']:
             collect('cargo',package['name'],package['version'],package.get('license'),Path(package['manifest_path']).parent,package.get('license_file'))
     tree=json.loads(subprocess.check_output(['pnpm','list','--prod','--depth','Infinity','--json'],cwd=ROOT/'app',stderr=subprocess.PIPE))
