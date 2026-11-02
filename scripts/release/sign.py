@@ -4,6 +4,7 @@ import contextlib
 import os
 import re
 import secrets
+import shlex
 import subprocess
 import tempfile
 from pathlib import Path
@@ -12,9 +13,33 @@ from pathlib import Path
 def run(args, **kwargs):
     result = subprocess.run([str(x) for x in args], capture_output=True, **kwargs)
     if result.returncode:
+        if Path(str(args[0])).name == 'codesign':
+            # codesign receives only public fingerprints and file paths, never passwords/keys.
+            message = result.stderr.decode(errors='replace')[:2000]
+            for name in ('SIVIO_SIGNING_KEYCHAIN_PASSWORD', 'SIVIO_CERTIFICATE_PASSWORD', 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD'):
+                secret = os.environ.get(name)
+                if secret:
+                    message = message.replace(secret, '[REDACTED]')
+            raise RuntimeError('codesign failed: ' + message)
         # Security CLI errors can echo password/key arguments. Do not print them.
         raise RuntimeError(f'{Path(str(args[0])).name} failed (exit {result.returncode}); signing output withheld')
     return result.stdout
+
+
+@contextlib.contextmanager
+def runner_discovery(keychain):
+    """Use the temporary identity for discovery only on an ephemeral GitHub runner."""
+    if os.environ.get('GITHUB_ACTIONS') != 'true':
+        yield
+        return
+    paths = shlex.split(run(['security', 'list-keychains', '-d', 'user']).decode())
+    if str(keychain) not in paths:
+        run(['security', 'list-keychains', '-d', 'user', '-s', *paths, keychain])
+    try:
+        yield
+    finally:
+        current = shlex.split(run(['security', 'list-keychains', '-d', 'user']).decode())
+        run(['security', 'list-keychains', '-d', 'user', '-s', *[p for p in current if p != str(keychain)]])
 
 
 @contextlib.contextmanager
@@ -30,8 +55,12 @@ def identity():
             keychain.write_bytes(base64.b64decode(snapshot, validate=True))
             keychain.chmod(0o600)
             try:
-                run(['security', 'unlock-keychain', '-p', os.environ['SIVIO_SIGNING_KEYCHAIN_PASSWORD'], keychain])
-                yield fingerprint, str(keychain)
+                password = os.environ['SIVIO_SIGNING_KEYCHAIN_PASSWORD']
+                run(['security', 'unlock-keychain', '-p', password, keychain])
+                run(['security', 'set-keychain-settings', '-lut', '21600', keychain])
+                run(['security', 'set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', password, keychain])
+                with runner_discovery(keychain):
+                    yield fingerprint, str(keychain)
             finally:
                 subprocess.run(['security', 'lock-keychain', str(keychain)], capture_output=True)
         return
@@ -54,7 +83,8 @@ def identity():
             run(['security', 'unlock-keychain', '-p', password, keychain])
             run(['security', 'import', p12, '-k', keychain, '-P', os.environ['SIVIO_CERTIFICATE_PASSWORD'], '-T', '/usr/bin/codesign'])
             run(['security', 'set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', password, keychain])
-            yield fingerprint, str(keychain)
+            with runner_discovery(keychain):
+                yield fingerprint, str(keychain)
         finally:
             subprocess.run(['security', 'delete-keychain', str(keychain)], capture_output=True)
 

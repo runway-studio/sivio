@@ -98,6 +98,14 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
     setProgress(null);
     setErrorMsg(null);
     try {
+      if (phase === "error" || !candidateRef.current) {
+        const info = await invoke<UpdateInfo | null>("check_app_update_info");
+        candidateRef.current = info?.candidateId ?? null;
+        setAvailableVersion(info?.availableVersion ?? null);
+        setPhase(info ? "upgradable" : "incompatible");
+        // Show the newly checked version before another explicit download.
+        return;
+      }
       unlistenRef.current?.();
       unlistenRef.current = await listen<DownloadProgress>(
         "update-download-progress",
@@ -109,17 +117,7 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
             setProgress(e.payload);
         },
       );
-      // Retry checks again so a failed initial check or expired candidate can recover.
-      const info = await invoke<UpdateInfo | null>("check_app_update_info");
-      candidateRef.current = info?.candidateId ?? null;
-      if (!info) {
-        setPhase("incompatible");
-        unlistenRef.current?.();
-        unlistenRef.current = null;
-        return;
-      }
-      setAvailableVersion(info.availableVersion);
-      const candidateId = info.candidateId;
+      const candidateId = candidateRef.current;
       await invoke("download_app_update", { candidateId });
       unlistenRef.current?.();
       unlistenRef.current = null;
@@ -130,7 +128,7 @@ export function DatabaseUpgrade({ payload }: DatabaseUpgradeProps) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
       setPhase("error");
     }
-  }, []);
+  }, [phase]);
 
   const percent =
     progress && progress.total && progress.total > 0
