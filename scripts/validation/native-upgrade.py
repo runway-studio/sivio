@@ -104,9 +104,10 @@ def main():
             # Register the production App's stable signer, plus only this test
             # control client's hash. No relaxed helper authentication.
             control = network / 'si-helper-control'
-            details = subprocess.run(['codesign', '-d', '--verbose=4', str(control)], capture_output=True, text=True, check=True).stderr
-            control_hash = re.search(r'^CDHash=(\w+)$', details, re.M)[1]
             observer = work / 'observer-control'; shutil.copy2(control, observer)
+            call(['codesign', '--force', '--sign', fingerprint, '--keychain', keychain, '--identifier', 'local.siassist.validation', observer])
+            details = subprocess.run(['codesign', '-d', '--verbose=4', str(observer)], capture_output=True, text=True, check=True).stderr
+            control_hash = re.search(r'^CDHash=(\w+)$', details, re.M)[1]
             installer = network / 'clash-verge-service-uninstall'
             call(['sudo', '-n', network / 'clash-verge-service-install', '--install-service', '--install-core', core,
                   '--sha256', sha(core), '--client-signer', fingerprint, '--client-cdhash', control_hash])
@@ -129,6 +130,7 @@ def main():
                     if preference_hash is None and any(e['stage'] == 'before-upgrade' for e in observed):
                         preference_hash = sha(ai / 'settings.json')
                         status = json.loads(call([observer, 'status'], env={**app_env, 'SI_VALIDATION_ROOT': str(network_root)}))
+                        result['observerBefore'] = status
                         assert status['code'] == 0 and status['data']['is_active']
                         old_core_pid = status['data']['core_pid']
                     time.sleep(0.5)
