@@ -460,5 +460,13 @@
       "url-password"
     ],
     "reason": "Reviewed public upstream test/example or local negative-test fixture; exact file digest pins this exception. No production credential."
+  },
+  {
+    "path": "scripts/release/privacy.py",
+    "sha256": "6296c755c1d6cfc60ba8522a03b0a78f50ed7aeeb093877ec3d84dff93bd185b",
+    "rules": [
+      "internal-company"
+    ],
+    "reason": "Scanner rule definitions name organization keywords to detect; no internal URL, personal data or credential value. Exact implementation digest reviewed."
   }
 ]
