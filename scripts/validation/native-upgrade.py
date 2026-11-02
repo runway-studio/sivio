@@ -41,7 +41,7 @@ def events(path):
 def process_ids(binary):
     rows = call(['ps', '-axo', 'pid=,command=']).decode().splitlines()
     return [int(row.strip().split(None, 1)[0]) for row in rows
-            if len(row.strip().split(None, 1)) == 2 and row.strip().split(None, 1)[1].split(' --', 1)[0] == str(binary)]
+            if len(row.strip().split(None, 1)) == 2 and (row.strip().split(None, 1)[1] == str(binary) or row.strip().split(None, 1)[1].startswith(str(binary) + ' '))]
 
 
 def main():
@@ -53,17 +53,13 @@ def main():
     work.mkdir(mode=0o700)
     assets = work / 'target'; assets.mkdir()
     repo = 'runway-studio/sivio'
-    call(['gh', 'release', 'download', args.tag, '--repo', repo, '--dir', assets])
-    Scanner().artifacts(assets).require_clean()
-    evidence = json.loads((assets / 'release-evidence.json').read_text())
     config = json.loads((ROOT / 'app/src-tauri/release-config.json').read_text())
     env = {**os.environ, 'CARGO_HOME': str(ROOT / 'build/cache/cargo')}
     subprocess.run(['cargo', '+1.99.0', 'build', '--locked', '--manifest-path', 'scripts/release/verifier/Cargo.toml'], cwd=ROOT, env=env, check=True)
-    verify_local(assets, args.tag, evidence['sourceSha'], config)
     subprocess.run(['pnpm', '--dir', 'app', 'install', '--frozen-lockfile'], cwd=ROOT, check=True)
     for channel in ('stable', 'alpha'):
         subprocess.run([sys.executable, 'scripts/fetch-mihomo.py', '--arch', 'aarch64-apple-darwin', '--channel', channel], cwd=ROOT, check=True)
-    result = {'targetVersion': version, 'targetSourceSha': evidence['sourceSha'], 'testHostVersion': '0.1.0',
+    result = {'targetVersion': version, 'testHostVersion': '0.1.0',
               'testHost': 'same production backend with a compile-time CI driver', 'status': 'failed'}
     output = ROOT / 'build/reports/native-upgrade.json'
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -81,6 +77,20 @@ def main():
                 set_version(version)
             report = json.loads((ROOT / 'build/reports/app-aarch64-artifact.json').read_text())
             assert report['validationDriver'] is True
+            # Build the old test host concurrently with the target release job.
+            deadline = time.monotonic() + 1200
+            while time.monotonic() < deadline:
+                check = subprocess.run(['gh', 'release', 'view', args.tag, '--repo', repo, '--json', 'isDraft'], capture_output=True)
+                if check.returncode == 0 and json.loads(check.stdout)['isDraft'] is False:
+                    break
+                time.sleep(10)
+            else:
+                raise RuntimeError('Published test target unavailable')
+            call(['gh', 'release', 'download', args.tag, '--repo', repo, '--dir', assets])
+            Scanner().artifacts(assets).require_clean()
+            evidence = json.loads((assets / 'release-evidence.json').read_text())
+            verify_local(assets, args.tag, evidence['sourceSha'], config)
+            result['targetSourceSha'] = evidence['sourceSha']
             app = work / 'Sivio.app'
             shutil.copytree(ROOT / report['app'], app)
             binary = app / 'Contents/MacOS/sivio-desktop'
@@ -133,7 +143,7 @@ def main():
             new_hash = sha(binary); assert new_hash != old_hash
             call(['codesign', '--verify', '--deep', '--strict', '--test-requirement', '=certificate leaf = H"' + fingerprint + '"', app])
             # Wait for the normal, uninstrumented target app to reopen and resume
-            # its encrypted network profile with the same signer/Keychain access.
+            # its saved network profile with the same helper signer.
             deadline = time.monotonic() + 90
             proxy = urllib.request.build_opener(urllib.request.ProxyHandler({'https': 'http://127.0.0.1:17890'}))
             new_pids = []
