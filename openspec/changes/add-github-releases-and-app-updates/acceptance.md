@@ -21,7 +21,6 @@
 ## Not yet verified
 
 - NOT_VERIFIED: isolated native N→N+1 with user database/settings preserved, real network cleanup/recovery and same-identity privileged helper recognition.
-- NOT_VERIFIED: published Release, anonymous asset/manifest readback and latest selection. No actual version tag/Release is authorized solely by this acceptance record.
 - Existing dependency inventory still records missing standalone notices for `seahash@4.1.0` and `html-parse-stringify@3.0.1`; public cached supplements are now versioned for consistent clean builds. This work does not claim legal clearance.
 
 ## Clean runner candidate
@@ -41,4 +40,18 @@ The complete eight-file set was downloaded and independently rechecked with `pub
 
 ## Release boundary
 
-Current product version is `0.1.0`. An existing internal 0.1.0 installation requires a manual first installation; it will not automatically upgrade to the same version. Before the first publication, present the exact commit, version, asset hashes and remaining native acceptance limits. Do not label a local dirty build or filesystem rollback test as a verified production upgrade.
+Current product version is `0.1.0`. An existing internal 0.1.0 installation requires a manual first installation; it will not automatically upgrade to the same version. Do not label a local dirty build or filesystem rollback test as a verified production upgrade.
+
+## Published first release
+
+The user explicitly requested publication at the same current version. [Sivio v0.1.0](https://github.com/runway-studio/sivio/releases/tag/v0.1.0) was published on 2026-11-02 at 17:00:25 Asia/Shanghai, with `draft=false`, `prerelease=false`, and selected as latest. Tag source: `81d2caa5b17924534bdb9fbdb43cad819494f8ac`.
+
+[Release run 41415402515](https://github.com/runway-studio/sivio/actions/runs/41415402515) completed both build and publish successfully. The publish job independently verified the asset set, signatures and source binding, uploaded all eight files, and anonymously downloaded/hash-checked every published asset plus the latest feed. Local follow-up confirmed the public Release HTML, installer HTTP 200, latest version `0.1.0`, feed signature contents, and checksums matching GitHub asset digests. Local anonymous API quota was exhausted, so only metadata used authenticated API access; the page/feed/download checks did not use authentication.
+
+| Published asset | SHA256 |
+|---|---|
+| `Sivio-0.1.0-aarch64.zip` (41,571,455 bytes) | `7d3d546f50c49cf24cafbade8413838ad20da4ce757dcdeb246afc102f72a8ee` |
+| `Sivio-0.1.0-aarch64.app.tar.gz` | `88e2b40e2ed53b41bcdd1cb5fcf5f3bbad63a24861282be3ee3255bcdd0d5ac7` |
+| `Sivio-0.1.0-source-adadaea852d0.tar.gz` | `adadaea852d079935ff0eb2662038f644f65ff71d5f7e53ece243ac1be1f8c85` |
+
+This published build supersedes the earlier validation candidate hashes above. Official feed: `https://github.com/runway-studio/sivio/releases/latest/download/latest.json`. Full local readback evidence: `build/reports/v0.1.0-publication.json` (ignored diagnostic output). Native N→N+1/helper behavior remains NOT_VERIFIED; publication of this first manually installed version does not claim that test was performed.
