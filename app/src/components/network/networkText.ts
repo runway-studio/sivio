@@ -1,11 +1,11 @@
 import { useTranslation } from "react-i18next";
 
 export const APP_RESTART_MESSAGE =
-  "Sivio 运行期间 App 文件已被替换，请完全退出后打开新版 App，再启用网络。";
+  "Sivio 运行期间 App 文件已被替换或删除，请完全退出后从应用程序目录打开完整的 App，再启用网络。";
 
 const english: Record<string, string> = {
   [APP_RESTART_MESSAGE]:
-    "The app files changed while Sivio was running. Quit Sivio completely, open the new app, then enable networking again.",
+    "The app files were replaced or deleted while Sivio was running. Quit Sivio completely, open an intact copy from Applications, then enable networking again.",
   " · 需要重新打开 App": " · Reopen the app required",
   首页: "Home",
   重试读取配置: "Retry loading settings",

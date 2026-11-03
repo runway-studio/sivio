@@ -50,7 +50,9 @@ git push origin v0.2.0
 
 ## 产物与验证
 
-每版包含 `Sivio-<version>-aarch64.zip`、`.app.tar.gz`、`.app.tar.gz.sig`、精确源码包、`latest.json`、`SHA256SUMS`、`release-evidence.json` 和发行说明。
+从 v0.1.2 起，每版包含 `Sivio-<version>-aarch64.dmg`（推荐首次安装）、`.zip`、`.app.tar.gz`、`.app.tar.gz.sig`、精确源码包、`latest.json`、`SHA256SUMS`、`release-evidence.json` 和发行说明。
+
+DMG 在 App 最终签名后制作，包含 App、指向 `/Applications` 的快捷入口和内部签名安装说明。构建阶段只读挂载，核对应用文件摘要及执行位与原件一致，验证签名并扫描展开内容。独立 consumer job 不注入签名凭据，测试挂载复制、首次特权 helper 安装、已签名诊断客户端认证、真实 HTTPS 转发及续租/停止；该测试不代替用户手动允许、管理员授权弹窗或 TUN 验收。内部签名被 Gatekeeper 拒绝属于预期边界，不标记为已公证。
 
 先完成所有资源修改并签 App，最后生成归档并签更新包。发行生成器使用与 App 相同的 Rust 验签函数，检查真实字节、产品/版本/架构、源码摘要和 tag；拒绝未提交源码及不完整资产。CI 从固定内核下载清单准备资源，不依赖开发机器缓存。publish job 重新验签和核对上传摘要后才公开版本；发布后不带身份认证回读全部资产与 latest。回读失败时恢复此前 latest（若存在），运行标失败；首次发行没有旧 latest 可恢复，须人工检查且不能宣称上线完成。
 

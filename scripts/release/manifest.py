@@ -94,11 +94,13 @@ def assemble(report_path, tag, notes, output):
         raise ValueError('Validation-driver bundles cannot be published')
     if report.get('sourceDirty', True):
         raise ValueError('Uncommitted source is not a publishable release')
+    if report.get('dmgVerification', {}).get('verified') is not True:
+        raise ValueError('Missing mounted DMG verification')
     if not re.fullmatch('[0-9a-f]{40}', report['sourceSha']):
         raise ValueError('Missing immutable source SHA')
     assets = {}
     for field, digest in [('archive', 'sha256'), ('updaterArtifact', 'updaterSha256'),
-                          ('signature', 'signatureSha256'), ('sourceArchive', 'sourceSha256')]:
+                          ('signature', 'signatureSha256'), ('sourceArchive', 'sourceSha256'), ('dmg', 'dmgSha256')]:
         path = ROOT / report[field]
         if not path.is_file() or path.name in assets or sha(path) != report[digest]:
             raise ValueError(f'Missing, duplicate or altered asset: {field}')
@@ -118,6 +120,7 @@ def assemble(report_path, tag, notes, output):
     (output / 'release-notes.md').write_text(notes + '\n')
     evidence = {k: report[k] for k in ('sourceSha', 'version', 'architecture', 'signing', 'publicKey')}
     evidence['tag'] = tag
+    evidence['dmgVerification'] = report['dmgVerification']
     (output / 'release-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
     names = sorted([*assets, 'latest.json', 'release-notes.md', 'release-evidence.json'])
     (output / 'SHA256SUMS').write_text(''.join(f'{sha(output / name)}  {name}\n' for name in names))

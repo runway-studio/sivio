@@ -719,7 +719,7 @@ it("does not show service setup during normal prepared-core use", async () => {
   view.unmount();
 });
 
-it("asks to reopen a replaced running app instead of reinstalling its helper", async () => {
+it("asks to reopen a replaced or deleted running app instead of reinstalling its helper", async () => {
   snapshot.helperCompatible = true;
   snapshot.helperAuthorized = false;
   snapshot.appRestartRequired = true;
@@ -728,7 +728,7 @@ it("asks to reopen a replaced running app instead of reinstalling its helper", a
   snapshot.runtime.error = "helper stop failed: caller signature is not trusted";
   const view = mount();
   expect(await screen.findByText(
-    "Sivio 运行期间 App 文件已被替换，请完全退出后打开新版 App，再启用网络。",
+    "Sivio 运行期间 App 文件已被替换或删除，请完全退出后从应用程序目录打开完整的 App，再启用网络。",
   )).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "安装 / 修复服务" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "设置" }));

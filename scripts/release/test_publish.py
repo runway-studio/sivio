@@ -19,8 +19,9 @@ class Publication(unittest.TestCase):
             signature = Path(str(archive) + '.sig')
             signature.write_text('signature-contents')
             (root / 'Sivio-0.2.0-aarch64.zip').write_bytes(b'install fixture')
+            (root / 'Sivio-0.2.0-aarch64.dmg').write_bytes(b'dmg fixture')
             config = dict(publicKey='public', repository='runway-studio/sivio')
-            evidence = dict(version='0.2.0', tag='v0.2.0', architecture='aarch64', signing='stable-internal', publicKey='public', sourceSha='a' * 40)
+            evidence = dict(version='0.2.0', tag='v0.2.0', architecture='aarch64', signing='stable-internal', publicKey='public', sourceSha='a' * 40, dmgVerification={'verified': True})
             (root / 'release-evidence.json').write_text(json.dumps(evidence))
             manifest = build_manifest('0.2.0', config['repository'], [dict(version='0.2.0', architecture='aarch64', signature=signature, updaterArtifact=archive)], 'notes', '2026-11-02T00:00:00Z')
             (root / 'latest.json').write_text(json.dumps(manifest))
@@ -29,6 +30,11 @@ class Publication(unittest.TestCase):
             # Signature cryptography is exercised with real public vectors in test_signatures.
             with patch('publish.verify'):
                 verify_local(root, 'v0.2.0', 'a' * 40, config)
+                dmg = root / 'Sivio-0.2.0-aarch64.dmg'
+                dmg.unlink()
+                with self.assertRaises((ValueError, FileNotFoundError)):
+                    verify_local(root, 'v0.2.0', 'a' * 40, config)
+                dmg.write_bytes(b'dmg fixture')
                 with self.assertRaises(ValueError):
                     verify_local(root, 'v0.2.0', 'b' * 40, config)
                 stray = root / 'unexpected.txt'

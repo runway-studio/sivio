@@ -33,6 +33,10 @@ def verify_local(folder, tag, source_sha, config):
         raise ValueError('Unexpected or missing release assets')
     archive = f'Sivio-{version}-aarch64.app.tar.gz'
     required = {archive, archive + '.sig', f'Sivio-{version}-aarch64.zip', 'latest.json', 'release-notes.md', 'release-evidence.json'}
+    if parse(version) >= parse('0.1.2'):
+        required.add(f'Sivio-{version}-aarch64.dmg')
+        if evidence.get('dmgVerification', {}).get('verified') is not True:
+            raise ValueError('Missing DMG verification evidence')
     sources = [name for name in expected if re.fullmatch(r'Sivio-' + re.escape(version) + r'-source-[0-9a-f]{12}\.tar\.gz', name)]
     if not required.issubset(expected) or len(sources) != 1:
         raise ValueError('Incomplete release set')

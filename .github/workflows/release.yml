@@ -85,8 +85,31 @@ jobs:
       - name: Upload build diagnostics on failure
         if: failure()
         run: echo 'Raw build logs are not uploaded; inspect the bounded workflow diagnostics.'
-  publish:
+  consumer:
     needs: build
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.build.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: sivio-release-assets
+          path: dist/release-assets
+      - name: Verify DMG and fresh helper without signing credentials
+        env:
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+        run: python3 scripts/validation/dmg-consumer.py --assets dist/release-assets --version "${RELEASE_TAG#v}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: sivio-dmg-consumer-evidence
+          path: build/reports/dmg-consumer.json
+          if-no-files-found: error
+  publish:
+    needs: [build, consumer]
     if: github.event_name == 'push' || !inputs.validate_only
     runs-on: ubuntu-24.04
     timeout-minutes: 30

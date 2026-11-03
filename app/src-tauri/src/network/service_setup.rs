@@ -2,13 +2,17 @@
 use super::*;
 
 pub(super) const APP_RESTART_MESSAGE: &str =
-    "Sivio 运行期间 App 文件已被替换，请完全退出后打开新版 App，再启用网络。";
+    "Sivio 运行期间 App 文件已被替换或删除，请完全退出后从应用程序目录打开完整的 App，再启用网络。";
 
 fn reports_replaced_code(success: bool, diagnostic: &str) -> bool {
-    !success && diagnostic.contains("the code on disk does not match what is running")
+    // This diagnostic comes from codesign verifying our own live PID. ENOENT
+    // means its on-disk code disappeared, not that the helper is unregistered.
+    !success
+        && (diagnostic.contains("the code on disk does not match what is running")
+            || diagnostic.contains("No such file or directory"))
 }
 
-/// A bundle replaced underneath a live process cannot be repaired by registering
+/// A bundle replaced or deleted underneath a live process cannot be repaired by registering
 /// another hash. Check the running PID, not just the (valid) replacement on disk.
 pub(super) async fn running_code_changed() -> bool {
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -19,6 +23,7 @@ pub(super) async fn running_code_changed() -> bool {
     let Ok(Ok(output)) = tokio::time::timeout(
         Duration::from_secs(3),
         Command::new("/usr/bin/codesign")
+            .env("LC_ALL", "C")
             .args(["--verify", "--verbose=2", &std::process::id().to_string()])
             .kill_on_drop(true)
             .output(),
@@ -194,6 +199,10 @@ mod tests {
             false,
             "67887: the code on disk does not match what is running\n"
         ));
+        assert!(reports_replaced_code(
+            false,
+            "39506: No such file or directory\n"
+        ));
         for diagnostic in [
             "CSSMERR_TP_NOT_TRUSTED",
             "code object is not signed at all",
@@ -206,6 +215,7 @@ mod tests {
             true,
             "the code on disk does not match what is running"
         ));
+        assert!(!reports_replaced_code(true, "No such file or directory"));
     }
     #[test]
     fn only_exact_desktop_certificate_requirements_can_be_registered() {

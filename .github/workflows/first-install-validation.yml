@@ -1,13 +1,11 @@
 name: Clean Mac first-install validation
 on:
-  push:
-    branches: ['codex/first-install-validation']
   workflow_dispatch:
     inputs:
       tag:
         description: Published release to download anonymously
         required: true
-        default: v0.1.1
+        default: v0.1.2
         type: string
 permissions:
   contents: read

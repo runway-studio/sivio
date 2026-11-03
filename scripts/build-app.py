@@ -146,6 +146,10 @@ def main():
  report.update(validationDriver=args.upgrade_validation,buildProfile=profile,appBytes=sum(p.stat().st_size for p in destination.rglob('*') if p.is_file()),archiveBytes=zip_path.stat().st_size)
  report.update(sourceArchive=str(source_archive.relative_to(ROOT)),sourceSha256=source_digest,coreArchive='network/mihomo-cores.xz')
  if args.release_distribution:
+  from dmg import build_dmg
+  dmg_path=output/f'{product}-{version}-{args.arch}.dmg'
+  dmg_verification=build_dmg(destination,dmg_path,version)
+  report.update(dmg=str(dmg_path.relative_to(ROOT)),dmgSha256=hashlib.sha256(dmg_path.read_bytes()).hexdigest(),dmgVerification=dmg_verification)
   from sign import sign_update
   from manifest import verify
   from datetime import datetime,timezone

@@ -231,5 +231,9 @@ experiments/  # 早期技术验证，非当前业务应用入口
 ## 版本发布与更新
 
 Sivio 的 GitHub Releases 面向 macOS Apple Silicon，使用稳定内部签名。
+首次安装请从 [GitHub Releases](https://github.com/runway-studio/sivio/releases/latest) 下载 `.dmg`：完全退出旧版，将 `Sivio.app` 拖到 `Applications`，复制完成后推出映像，再从“应用程序”打开。不要从 DMG 或临时构建目录直接运行。
+
+本版未经过 Apple 公证。如果 macOS 阻止打开，确认来自官方发布页后，在“系统设置 → 隐私与安全性”选择“仍要打开”，自行完成系统确认。首次开启系统代理或 TUN 时需授权安装网络服务。若端口被其他代理占用，可在“网络设置 → 端口设置”改为空闲端口。
+
 应用内可检查、下载验证并确认安装更新；旧版首次接入需要手动安装带更新能力的版本。
 构建、签名配置、tag 发布及恢复操作见 [版本发布手册](docs/implementation/releases.md)。
