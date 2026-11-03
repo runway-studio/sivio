@@ -102,7 +102,14 @@ def probe_identity(fingerprint, keychain):
 def sign_bundle(app, fingerprint, keychain, identifier):
     binaries = app / 'Contents/Resources/network'
     for name in ['clash-verge-service', 'clash-verge-service-install', 'clash-verge-service-uninstall', 'si-helper-control', 'si-network-supervisor']:
-        run(['codesign', '--force', '--sign', fingerprint, '--keychain', keychain, '--options', 'runtime', binaries / name])
+        # Tauri may re-sign resources with their filename as identifier. Restore
+        # the identity required by the helper after that packaging step.
+        nested_identifier = {'si-helper-control': 'local.siassist.validation',
+                             'si-network-supervisor': 'local.siassist.supervisor'}.get(name, 'local.siassist.' + name)
+        run(['codesign', '--force', '--sign', fingerprint, '--keychain', keychain, '--options', 'runtime',
+             '--identifier', nested_identifier, binaries / name])
+        run(['codesign', '--verify', '--strict', '--test-requirement',
+             f'=identifier "{nested_identifier}" and certificate leaf = H"{fingerprint}"', binaries / name])
     requirement = f'designated => identifier "{identifier}" and certificate leaf = H"{fingerprint}"'
     run(['codesign', '--force', '--sign', fingerprint, '--keychain', keychain, '--options', 'runtime', '--identifier', identifier,
          '--requirements', '=' + requirement, '--preserve-metadata=entitlements', app])

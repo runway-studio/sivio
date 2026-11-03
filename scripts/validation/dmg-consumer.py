@@ -65,6 +65,8 @@ def main():
                                     'expectedForInternalSigning': 'manual approval required'}
             network = installed / 'Contents/Resources/network'
             control = network / 'si-helper-control'
+            call(['codesign', '--verify', '--strict', '--test-requirement',
+                  '=identifier "local.siassist.validation"', control])
             details = call(['codesign', '-d', '--verbose=4', control]).decode()
             control_hash = re.search(r'^CDHash=(\w+)$', details, re.M)[1]
             app_details = call(['codesign', '-d', '--verbose=4', installed]).decode()
