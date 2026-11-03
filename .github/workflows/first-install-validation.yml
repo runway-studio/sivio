@@ -1,0 +1,32 @@
+name: Clean Mac first-install validation
+on:
+  push:
+    branches: ['codex/first-install-validation']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release to download anonymously
+        required: true
+        default: v0.1.1
+        type: string
+permissions:
+  contents: read
+jobs:
+  first-install:
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate an untouched download without signing identities
+        env:
+          RELEASE_TAG: ${{ inputs.tag || 'v0.1.1' }}
+        run: python3 scripts/validation/first-install.py --tag "$RELEASE_TAG"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: first-install-evidence
+          path: build/reports/first-install.json
+          if-no-files-found: error
+          retention-days: 14
