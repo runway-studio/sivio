@@ -91,7 +91,10 @@ def main():
  if not args.skip_helper_build:
   call(['cargo','build','--manifest-path','native/helper/Cargo.toml','--features','standalone,client','--bins']+cargo_profile+(['--target',target] if cross else []),f'helper-{args.arch}-package.log',env)
  helpers=ROOT/'build/cache/target'/(target if cross else '')/profile
- for name in ['clash-verge-service','clash-verge-service-install','clash-verge-service-uninstall','si-helper-control']:
+ # Resources survive builds locally. Do not ship obsolete helper executables.
+ for name in ['clash-verge-service','clash-verge-service-install','clash-verge-service-uninstall']:
+  (net/name).unlink(missing_ok=True)
+ for name in ['sivio-helper','sivio-helper-install','sivio-helper-uninstall','si-helper-control']:
   shutil.copy2(helpers/name,net/name)
   identifier='local.siassist.validation' if name=='si-helper-control' else 'local.siassist.'+name
   subprocess.run(['/usr/bin/codesign','--force','--sign','-','--identifier',identifier,str(net/name)],check=True,capture_output=True)
@@ -121,7 +124,7 @@ def main():
  source=ROOT/'build/cache/target'/(target if cross else '')/profile/'bundle/macos'/f'{product}.app';output=ROOT/'dist'/f'{"release" if args.release_distribution else "internal"}-{args.arch}'
  destination=copy_versioned_bundle(source,output)
  verify_runtime_libraries(destination/'Contents/MacOS/sivio-desktop')
- for name in ['clash-verge-service','clash-verge-service-install','clash-verge-service-uninstall','si-helper-control','si-network-supervisor']:
+ for name in ['sivio-helper','sivio-helper-install','sivio-helper-uninstall','si-helper-control','si-network-supervisor']:
   verify_runtime_libraries(destination/'Contents/Resources/network'/name)
  signing_spec=importlib.util.spec_from_file_location('sivio_internal_signing',ROOT/'scripts/internal-signing.py')
  signing_module=importlib.util.module_from_spec(signing_spec);signing_spec.loader.exec_module(signing_module)

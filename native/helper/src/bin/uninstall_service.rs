@@ -176,7 +176,7 @@ fn main() -> Result<(), Error> {
     }
 
     let _ = run_command("systemctl", &["daemon-reload"], debug);
-    let target = clash_verge_service_ipc::prepare_service_install_directory()?.join("clash-verge-service");
+    let target = clash_verge_service_ipc::prepare_service_install_directory()?.join("sivio-helper");
     if target.exists() {
         std::fs::remove_file(&target)
             .map_err(|error| anyhow::anyhow!("Failed to remove service binary {target:?}: {error}"))?;
@@ -263,7 +263,7 @@ fn main() -> anyhow::Result<()> {
         Err(error) if has_raw_error(&error, ERROR_SERVICE_DOES_NOT_EXIST) => {}
         Err(error) => return Err(error.into()),
     }
-    let target = clash_verge_service_ipc::prepare_service_install_directory()?.join("clash-verge-service.exe");
+    let target = clash_verge_service_ipc::prepare_service_install_directory()?.join("sivio-helper.exe");
     if target.exists() {
         std::fs::remove_file(&target)
             .map_err(|error| anyhow::anyhow!("Failed to remove service binary {target:?}: {error}"))?;

@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { toast } from "@/lib/toast";
 import { settingsApi } from "@/lib/api";
 import { useUpdate } from "@/contexts/UpdateContext";
-import appIcon from "@/assets/icons/app-icon.png";
+import logo from "@/assets/icons/logo.svg";
 interface Channel {
   mode: "official" | "custom" | "disabled";
   endpoint: string;
@@ -109,7 +109,12 @@ export function AboutSection({ isPortable }: { isPortable: boolean }) {
   return (
     <div className="space-y-5">
       <section className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-5">
-        <img src={appIcon} alt="Sivio" className="h-12 w-12" />
+        <img
+          src={logo}
+          alt="Sivio"
+          draggable={false}
+          className="h-12 w-12 shrink-0"
+        />
         <div className="flex-1">
           <h2 className="font-semibold">Sivio</h2>
           <p className="mt-1 text-sm text-muted-foreground">

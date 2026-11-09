@@ -2033,7 +2033,7 @@ pub fn run() {
 /// 客户端不能一直指着代理：开机自启默认关闭，Sivio 一关客户端就连不上了。
 pub async fn cleanup_before_exit(app_handle: &tauri::AppHandle) {
     if let Some(network) = app_handle.try_state::<network::NetworkState>() {
-        if let Err(error) = network::shutdown(network.inner()).await { log::error!("network cleanup failed: {error}"); }
+        if let Err(error) = network::shutdown_for_exit(network.inner()).await { log::error!("network cleanup failed: {error}"); }
     }
     if let Some(state) = app_handle.try_state::<store::AppState>() {
         crate::mode::controller::detach_all(state.inner()).await;

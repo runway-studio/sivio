@@ -101,7 +101,7 @@ def probe_identity(fingerprint, keychain):
 
 def sign_bundle(app, fingerprint, keychain, identifier):
     binaries = app / 'Contents/Resources/network'
-    for name in ['clash-verge-service', 'clash-verge-service-install', 'clash-verge-service-uninstall', 'si-helper-control', 'si-network-supervisor']:
+    for name in ['sivio-helper', 'sivio-helper-install', 'sivio-helper-uninstall', 'si-helper-control', 'si-network-supervisor']:
         # Tauri may re-sign resources with their filename as identifier. Restore
         # the identity required by the helper after that packaging step.
         nested_identifier = {'si-helper-control': 'local.siassist.validation',

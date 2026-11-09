@@ -13,7 +13,7 @@ pub const CHANNEL_IDENTITY: ChannelIdentity = ChannelIdentity {
     id: "production",
     service_slug: "si-assist-service",
     windows_service_name: "clash_verge_service",
-    service_display_name: "Sivio Service",
+    service_display_name: "Sivio Network Helper",
     macos_app_bundle_id: "local.siassist.desktop",
     macos_service_id: "local.siassist.desktop.service",
 };
@@ -23,7 +23,7 @@ pub const CHANNEL_IDENTITY: ChannelIdentity = ChannelIdentity {
     id: "development",
     service_slug: "si-assist-service-dev",
     windows_service_name: "clash_verge_service_dev",
-    service_display_name: "Sivio Development Service",
+    service_display_name: "Sivio Development Network Helper",
     macos_app_bundle_id: "local.siassist.desktop.dev",
     macos_service_id: "local.siassist.desktop.dev.service",
 };

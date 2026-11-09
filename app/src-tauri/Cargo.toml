@@ -1,6 +1,6 @@
 [package]
 name = "sivio-desktop"
-version = "0.1.2"
+version = "0.1.3"
 description = "Your Shortcut to AI"
 authors = ["Jason Young"]
 license = "GPL-3.0-only"

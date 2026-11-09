@@ -52,6 +52,8 @@ impl From<&AuthenticatedOwner> for ActiveOwnerState {
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct OwnerGenerationState {
     generation: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    expired_owner: Option<String>,
 }
 
 pub async fn load_owner_desired_state(owner_key: &str) -> Result<DesiredState> {
@@ -116,6 +118,7 @@ pub async fn commit_active_owner_session(owner: &AuthenticatedOwner, session_tok
     let generation_path = paths.owner_generation_path();
     let mut generation_state: OwnerGenerationState = read_json_or_default(&generation_path).await?;
     generation_state.generation = generation_state.generation.saturating_add(1);
+    generation_state.expired_owner = None;
     write_json_atomic(&generation_path, &generation_state).await?;
 
     let state = ActiveOwnerState {
@@ -127,6 +130,23 @@ pub async fn commit_active_owner_session(owner: &AuthenticatedOwner, session_tok
     };
     write_json_atomic(&paths.active_owner_path(), &state).await?;
     Ok(state)
+}
+
+pub(super) async fn can_reconnect(owner: &AuthenticatedOwner, expired: u64) -> Result<bool> {
+    let path = service_paths()?.owner_generation_path();
+    let state: OwnerGenerationState = read_json_or_default(&path).await?;
+    Ok(state.generation == expired && state.expired_owner.as_deref() == Some(&owner.key))
+}
+
+#[cfg(target_os = "macos")]
+pub(super) async fn record_expired_owner(active: &ActiveOwnerState) -> Result<()> {
+    let path = service_paths()?.owner_generation_path();
+    let mut state: OwnerGenerationState = read_json_or_default(&path).await?;
+    if state.generation == active.generation {
+        state.expired_owner = Some(active.owner_key.clone());
+        write_json_atomic(&path, &state).await?;
+    }
+    Ok(())
 }
 
 pub async fn clear_active_owner() -> Result<()> {

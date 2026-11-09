@@ -80,12 +80,14 @@ pub static IPC_AUTH_EXPECT: &str =
 
 pub static VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const PROTOCOL_EPOCH: u16 = 2;
-pub const PROTOCOL_REVISION: u16 = 13;
+pub const PROTOCOL_REVISION: u16 = 14;
 pub const MIN_SUPPORTED_CLIENT_REVISION: u16 = 7;
 // Revision 13 accepts root-pinned stable desktop signing certificates.
 // Revision 12 releases the lifecycle lock for bounded per-proxy delay reads.
 // Session proofs are checked both before and after all observation reads.
 pub const MIN_REQUIRED_SERVICE_REVISION: u16 = 13;
+/// Conditional reconnection of an expired owner without displacing a newer session.
+pub const MIN_SERVICE_REVISION_FOR_RECONNECT: u16 = 14;
 /// Revision that introduced `/clash/stage-runtime`.
 /// This is a capability gate, not the minimum compatible service revision.
 pub const MIN_SERVICE_REVISION_FOR_RUNTIME_STAGING: u16 = 2;

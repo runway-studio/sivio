@@ -33,7 +33,7 @@ impl Lease {
         let slept = now.continuous.saturating_sub(self.observed.continuous)
             .saturating_sub(now.awake.saturating_sub(self.observed.awake)) > SLEEP_DETECTION_NS;
         let grace = slept && now.awake < self.deadline;
-        if grace { self.deadline = now.awake.saturating_add(WAKE_GRACE_NS); }
+        if grace { self.deadline = self.deadline.max(now.awake.saturating_add(WAKE_GRACE_NS)); }
         self.observed = now.clone();
         grace
     }
@@ -134,9 +134,16 @@ mod tests {
     #[test]
     fn wake_grace_is_not_regranted_by_restarting_daemon() {
         let mut lease=Lease::new(&owner(),now(0,0));
-        assert!(lease.observe(&now(4,604)));assert!(lease.live(&now(13,613)));
+        assert!(lease.observe(&now(25,625)));assert!(lease.live(&now(34,634)));
         let mut restored:Lease=serde_json::from_slice(&serde_json::to_vec(&lease).unwrap()).unwrap();
-        assert!(!restored.observe(&now(14,614)));assert!(!restored.live(&now(14,614)));
+        assert!(!restored.observe(&now(35,635)));assert!(!restored.live(&now(35,635)));
+    }
+    #[test]
+    fn early_wake_keeps_the_remaining_lease() {
+        let mut lease = Lease::new(&owner(), now(0, 0));
+        assert!(lease.observe(&now(4, 604)));
+        assert!(lease.live(&now(29, 629)));
+        assert!(!lease.live(&now(30, 630)));
     }
     #[test]
     fn expired_owner_is_not_resurrected_by_sleep() {

@@ -660,6 +660,62 @@ async fn read_session_observation(
     }
 }
 
+async fn start_managed_core(
+    owner: AuthenticatedOwner,
+    start_request: StartClashRequest,
+    expired_generation: Option<u64>,
+) -> Result<HttpResponse> {
+    let handler_deadline = Instant::now() + IPC_HANDLER_TIMEOUT;
+    if hash_session_token(&start_request.proposed_session_token).is_err() {
+        return bad_request("Invalid proposed owner session token");
+    }
+    if let Some(proxy) = start_request.macos_proxy.as_ref()
+        && let Err(error) = validate_proxy_config(proxy)
+    {
+        return service_error(ServiceError::invalid_proxy_config(error.to_string()));
+    }
+    let _lifecycle_guard = match enter_owner_lifecycle(&owner, OwnerLifecycleGate::Unchecked).await {
+        ControlFlow::Continue(guard) => guard,
+        ControlFlow::Break(response) => return response,
+    };
+    let previous_owner = match load_active_owner().await {
+        Ok(owner) => owner,
+        Err(error) => {
+            return service_unavailable(format!("Failed to load active owner: {error:#}"));
+        }
+    };
+    if let Some(expected) = expired_generation {
+        match super::desired::can_reconnect(&owner, expected).await {
+            Ok(true) if previous_owner.is_none() => {}
+            Ok(_) => return service_error(ServiceError::stale_owner_session()),
+            Err(error) => return service_unavailable(format!("Failed to inspect owner generation: {error:#}")),
+        }
+    }
+    let prepared_runtime = match prepare_runtime(&owner, &start_request.runtime).await {
+        Ok(prepared) => prepared,
+        Err(error) => return service_error(error),
+    };
+    let mut transition = StartOwnerTransition {
+        handler_deadline,
+        previous_owner,
+        owner: &owner,
+        prepared_runtime: Some(prepared_runtime),
+        proposed_session_token: &start_request.proposed_session_token,
+        macos_proxy: start_request.macos_proxy.as_ref(),
+    };
+    let (active, proxy_outcome) = match owner_proxy_transition(&mut transition).await {
+        Ok(result) => result,
+        Err(error) => return service_error(error),
+    };
+    info!("Core started successfully");
+    ok_json(StartClashResult {
+        session: OwnerSessionHandle {
+            generation: active.generation,
+        },
+        proxy_outcome,
+    })
+}
+
 fn create_ipc_router() -> Result<Router> {
     let router = Router::new()
         .get(IpcCommand::Magic.as_ref(), |ctx| async move {
@@ -704,54 +760,19 @@ fn create_ipc_router() -> Result<Router> {
             }
         })
         .post(IpcCommand::StartClash.as_ref(), |ctx| async move {
-            let handler_deadline = Instant::now() + IPC_HANDLER_TIMEOUT;
-            trace!("Received StartClash command");
             let (request, owner) = match authenticate_request::<AuthenticatedRequest<StartClashRequest>>(&ctx) {
-                ControlFlow::Continue(authenticated) => authenticated,
+                ControlFlow::Continue(value) => value,
                 ControlFlow::Break(response) => return response,
             };
-            let start_request = request.payload;
-            if hash_session_token(&start_request.proposed_session_token).is_err() {
-                return bad_request("Invalid proposed owner session token");
-            }
-            if let Some(proxy) = start_request.macos_proxy.as_ref()
-                && let Err(error) = validate_proxy_config(proxy)
-            {
-                return service_error(ServiceError::invalid_proxy_config(error.to_string()));
-            }
-            let _lifecycle_guard = match enter_owner_lifecycle(&owner, OwnerLifecycleGate::Unchecked).await {
-                ControlFlow::Continue(guard) => guard,
+            start_managed_core(owner, request.payload, None).await
+        })
+        .post(IpcCommand::ReconnectClash.as_ref(), |ctx| async move {
+            let (request, owner) = match authenticate_request::<AuthenticatedRequest<(u64, StartClashRequest)>>(&ctx) {
+                ControlFlow::Continue(value) => value,
                 ControlFlow::Break(response) => return response,
             };
-            let previous_owner = match load_active_owner().await {
-                Ok(owner) => owner,
-                Err(error) => {
-                    return service_unavailable(format!("Failed to load active owner: {error:#}"));
-                }
-            };
-            let prepared_runtime = match prepare_runtime(&owner, &start_request.runtime).await {
-                Ok(prepared) => prepared,
-                Err(error) => return service_error(error),
-            };
-            let mut transition = StartOwnerTransition {
-                handler_deadline,
-                previous_owner,
-                owner: &owner,
-                prepared_runtime: Some(prepared_runtime),
-                proposed_session_token: &start_request.proposed_session_token,
-                macos_proxy: start_request.macos_proxy.as_ref(),
-            };
-            let (active, proxy_outcome) = match owner_proxy_transition(&mut transition).await {
-                Ok(result) => result,
-                Err(error) => return service_error(error),
-            };
-            info!("Core started successfully");
-            ok_json(StartClashResult {
-                session: OwnerSessionHandle {
-                    generation: active.generation,
-                },
-                proxy_outcome,
-            })
+            let (generation, start) = request.payload;
+            start_managed_core(owner, start, Some(generation)).await
         })
         .post(IpcCommand::MihomoControl.as_ref(), |ctx| async move {
             let (request,owner)=match authenticate_request::<AuthenticatedSessionRequest<crate::MihomoControlRequest>>(&ctx) {ControlFlow::Continue(value)=>value,ControlFlow::Break(response)=>return response};
@@ -1020,7 +1041,7 @@ pub async fn require_active_session(
 ) -> std::result::Result<ActiveOwnerState, ServiceError> {
     let active = load_active_owner()
         .await
-        .map_err(|_| ServiceError::stale_owner_session())?
+        .map_err(|_| ServiceError::owner_switch_failed("could not read active owner"))?
         .ok_or_else(ServiceError::stale_owner_session)?;
     let supplied_hash = hash_session_token(&proof.token).map_err(|_| ServiceError::stale_owner_session())?;
     if active.owner_key != owner.key
@@ -1332,7 +1353,10 @@ async fn expire_owner_if_needed(force:bool) -> AnyResult<()> {
     // Stopping the verified managed core removes its TUN device, routes and DNS hijack.
     let stopped=CORE_MANAGER.lock().await.stop_core().await;
     restored?;stopped?;
-    if let Some(active)=active {persist_owner_core_stopped_by_key(&active.owner_key).await?;}
+    if let Some(active) = active {
+        persist_owner_core_stopped_by_key(&active.owner_key).await?;
+        if !force { super::desired::record_expired_owner(&active).await?; }
+    }
     clear_active_owner().await?;super::lease::clear()?;
     Ok(())
 }

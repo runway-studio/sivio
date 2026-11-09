@@ -16,7 +16,7 @@ fn non_unicode_arguments_do_not_panic_before_parsing() -> std::io::Result<()> {
     };
 
     // Reject before entering the repair gate or changing any service state.
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_clash-verge-service-install"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_sivio-helper-install"))
         .arg("--unknown-option")
         .arg(argument)
         .output()?;
@@ -28,7 +28,7 @@ fn non_unicode_arguments_do_not_panic_before_parsing() -> std::io::Result<()> {
 
 #[test]
 fn preparation_rejects_missing_cores_before_elevation() -> std::io::Result<()> {
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_clash-verge-service-install"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_sivio-helper-install"))
         .args(["--prepare-install", "--ensure"])
         .output()?;
     assert!(!output.status.success());

@@ -335,6 +335,7 @@ impl Backend for Live<'_> {
             StartPolicy {
                 suspend_proxy,
                 destination_approved: true,
+                ..Default::default()
             },
         )
         .await

@@ -81,7 +81,7 @@ pub(super) fn require_no_core_process(include_service: bool) -> Result<()> {
         let name = String::from_utf16_lossy(&entry.szExeFile[..length]);
         // SCM can be stopped while a core from an earlier service process remains alive.
         if CORE_NAMES.iter().any(|core| name.eq_ignore_ascii_case(core))
-            || (include_service && name.eq_ignore_ascii_case("clash-verge-service.exe"))
+            || (include_service && ["sivio-helper.exe", "clash-verge-service.exe"].iter().any(|helper| name.eq_ignore_ascii_case(helper)))
         {
             bail!(
                 "process {name} (PID {}) is still running; refusing a second core",

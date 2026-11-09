@@ -336,7 +336,7 @@ fn require_no_unix_core_processes(processes: &str, include_service: bool) -> Res
         if ["verge-mihomo", "verge-mihomo-alpha", "verge-mihomo-al"].contains(&name) {
             remaining_core.get_or_insert(name);
         }
-        if include_service && ["clash-verge-service", "clash-verge-ser"].contains(&name) {
+        if include_service && ["sivio-helper", "clash-verge-service", "clash-verge-ser"].contains(&name) {
             // Linux comm is truncated; argv[0] retains the installed helper's channel path.
             #[cfg(target_os = "linux")]
             let executable = Path::new(arguments.split_whitespace().next().unwrap_or(""));
@@ -694,6 +694,8 @@ mod tests {
         require_no_unix_core_processes(other, true)?;
         for residual in [
             current.to_owned(),
+            "/Library/PrivilegedHelperTools/local.siassist.desktop.service.bundle/Contents/MacOS/sivio-helper".into(),
+            "sivio-helper".into(),
             "clash-verge-service".into(),
             format!("/tmp{other}"),
             format!("{other}\n/Library/Application Support/clash-verge-service/cores/verge-mihomo"),

@@ -25,7 +25,7 @@ async fn main()->Result<()> {
     let args=std::env::args().collect::<Vec<_>>();
     match args.get(1).map(String::as_str) {
         Some("install")=>{
-            let installer=std::env::current_exe()?.with_file_name("clash-verge-service-install");
+            let installer=std::env::current_exe()?.with_file_name("sivio-helper-install");
             let core=PathBuf::from(args.get(2).context("install requires a verified core source")?);
             let hash=cdhash()?;
             let mut command=std::process::Command::new(installer);
@@ -35,7 +35,7 @@ async fn main()->Result<()> {
             ensure!(status.success(),"installation was refused or failed");
             println!("helper installed with explicitly trusted validation client");
         },
-        Some("crash-helper")|Some("expired-crash-helper")=>{let installer=std::env::current_exe()?.with_file_name("clash-verge-service-install");ensure!(std::process::Command::new(installer).arg(if args[1]=="expired-crash-helper"{"--prepare-expired-crash-validation"}else{"--prepare-crash-validation"}).status()?.success(),"crash validation failed or refused");},
+        Some("crash-helper")|Some("expired-crash-helper")=>{let installer=std::env::current_exe()?.with_file_name("sivio-helper-install");ensure!(std::process::Command::new(installer).arg(if args[1]=="expired-crash-helper"{"--prepare-expired-crash-validation"}else{"--prepare-crash-validation"}).status()?.success(),"crash validation failed or refused");},
         Some("control")=>{let method=args.get(2).context("control method required")?;let path=args.get(3).context("control path required")?;let body=args.get(4).map(|b|serde_json::from_str(b)).transpose()?;let response=ipc::control_mihomo(&credentials()?,&proof()?,&ipc::MihomoControlRequest{method:method.clone(),path:path.clone(),body}).await?;ensure!(response.code==0,"control rejected: {}",response.message);println!("{}",serde_json::to_string(&response.data)?);},
         Some("proxy")=>{let response=ipc::set_system_proxy(&credentials()?,&proof()?,&ipc::MacosProxyConfig::Global{host:"127.0.0.1".into(),port:15782,bypass:"localhost,127.*,::1".into()}).await?;ensure!(response.code==0,"proxy apply rejected: {}",response.message);println!("owned proxy applied");},
         Some("logs")=>{let response=ipc::get_clash_logs(&credentials()?).await?;ensure!(response.code==0,"logs rejected");println!("{}",serde_json::to_string(&response.data)?);},

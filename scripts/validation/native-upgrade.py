@@ -108,8 +108,8 @@ def main():
             call(['codesign', '--force', '--sign', fingerprint, '--keychain', keychain, '--identifier', 'local.siassist.validation', observer])
             details = subprocess.run(['codesign', '-d', '--verbose=4', str(observer)], capture_output=True, text=True, check=True).stderr
             control_hash = re.search(r'^CDHash=(\w+)$', details, re.M)[1]
-            installer = network / 'clash-verge-service-uninstall'
-            call(['sudo', '-n', network / 'clash-verge-service-install', '--install-service', '--install-core', core,
+            installer = network / 'sivio-helper-uninstall'
+            call(['sudo', '-n', network / 'sivio-helper-install', '--install-service', '--install-core', core,
                   '--sha256', sha(core), '--client-signer', fingerprint, '--client-cdhash', control_hash])
             app_env = {k: v for k, v in os.environ.items() if not any(word in k for word in ('TOKEN', 'PASSWORD', 'PRIVATE_KEY', 'SIGNING_KEYCHAIN', 'CERTIFICATE_P12'))}
             # Runner home is disposable and shared with LaunchServices restart.

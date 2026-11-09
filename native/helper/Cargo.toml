@@ -10,17 +10,17 @@ name = "clash_verge_service_ipc"
 path = "src/lib.rs"
 
 [[bin]]
-name = "clash-verge-service"
+name = "sivio-helper"
 path = "src/bin/service.rs"
 required-features = ["standalone"]
 
 [[bin]]
-name = "clash-verge-service-install"
+name = "sivio-helper-install"
 path = "src/bin/install_service.rs"
 required-features = ["standalone", "client"]
 
 [[bin]]
-name = "clash-verge-service-uninstall"
+name = "sivio-helper-uninstall"
 path = "src/bin/uninstall_service.rs"
 required-features = ["standalone"]
 

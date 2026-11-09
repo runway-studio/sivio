@@ -113,6 +113,62 @@ async fn a_new_owner_takes_over_and_the_previous_owner_becomes_inactive() -> Res
     stop_server(server).await
 }
 
+#[cfg(target_os = "macos")]
+#[tokio::test]
+#[serial]
+async fn expired_connection_reconnects_once_without_displacing_newer_sessions() -> Result<()> {
+    use clash_verge_service_ipc::{reconnect_clash, renew_owner};
+    let server = start_server().await?;
+    let owner = common::owner_credentials();
+    let (_, old) = start(&owner, &"81".repeat(32)).await?;
+    let path = clash_verge_service_ipc::service_paths()?.persistent_state_dir().join("owner-lease.json");
+    let mut lease: serde_json::Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+    lease["deadline"] = 0.into();
+    std::fs::write(path, serde_json::to_vec(&lease)?)?;
+    clash_verge_service_ipc::restore_desired_state().await?;
+    let stale = ServiceErrorCode::StaleOwnerSession as u16;
+    assert_eq!(renew_owner(&owner, &old).await?.code, stale);
+    let request = StartClashRequest {
+        runtime: runtime_bundle(), proposed_session_token: "82".repeat(32), macos_proxy: None,
+    };
+    let other = clash_verge_service_ipc::test_owner_credentials_for_uid(
+        &std::env::temp_dir().join(format!("service-ipc-reconnect-other-{}", std::process::id())),
+        91_003,
+    )?;
+    assert_eq!(reconnect_clash(&other, old.generation, &request).await?.code, stale);
+    assert_eq!(reconnect_clash(&owner, old.generation + 1, &request).await?.code, stale);
+    let response = reconnect_clash(&owner, old.generation, &request).await?;
+    anyhow::ensure!(response.code == 0, "{}", response.message);
+    let session = OwnerSessionProof {
+        generation: response.data.context("missing session")?.session.generation,
+        token: request.proposed_session_token.clone(),
+    };
+    assert!(session.generation > old.generation);
+    assert_eq!(renew_owner(&owner, &session).await?.code, 0);
+    assert_eq!(reconnect_clash(&owner, old.generation, &request).await?.code, stale);
+    assert_eq!(stop_clash(&owner, &session).await?.code, 0);
+    assert_eq!(reconnect_clash(&owner, old.generation, &request).await?.code, stale);
+    assert_eq!(reconnect_clash(&owner, session.generation, &request).await?.code, stale);
+    stop_server(server).await
+}
+
+#[tokio::test]
+#[serial]
+async fn unreadable_owner_state_does_not_permanently_reject_a_live_heartbeat() -> Result<()> {
+    let server = start_server().await?;
+    let owner = common::owner_credentials();
+    let (_, session) = start(&owner, &"83".repeat(32)).await?;
+    let path = clash_verge_service_ipc::service_paths()?.active_owner_path();
+    let saved = std::fs::read(&path)?;
+    std::fs::write(&path, b"incomplete state")?;
+    let response = clash_verge_service_ipc::renew_owner(&owner, &session).await;
+    std::fs::write(path, saved)?;
+    assert_eq!(response?.code, ServiceErrorCode::OwnerSwitchFailed as u16);
+    assert_eq!(clash_verge_service_ipc::renew_owner(&owner, &session).await?.code, 0);
+    assert_eq!(stop_clash(&owner, &session).await?.code, 0);
+    stop_server(server).await
+}
+
 #[tokio::test]
 #[serial]
 async fn installation_query_reports_global_occupancy_and_guards_handoff() -> Result<()> {

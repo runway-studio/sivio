@@ -78,7 +78,7 @@ def main():
             # The same elevated installer used after the desktop's system prompt.
             # Pin this exact shipped diagnostic client's hash; never re-sign it.
             helper_installed = True
-            call(['sudo', '-n', network / 'clash-verge-service-install', '--install-service',
+            call(['sudo', '-n', network / 'sivio-helper-install', '--install-service',
                   '--install-core', core, '--sha256', hashlib.sha256(core.read_bytes()).hexdigest(),
                   '--client-cdhash', app_hash, '--client-cdhash', control_hash])
             env = {**os.environ, 'SI_VALIDATION_ROOT': str(work / 'owner')}
@@ -105,7 +105,7 @@ def main():
             if attached:
                 subprocess.run(['hdiutil', 'detach', str(mount)], capture_output=True)
             if helper_installed:
-                cleanup = subprocess.run(['sudo', '-n', str(installed / 'Contents/Resources/network/clash-verge-service-uninstall')], capture_output=True, timeout=90)
+                cleanup = subprocess.run(['sudo', '-n', str(installed / 'Contents/Resources/network/sivio-helper-uninstall')], capture_output=True, timeout=90)
                 report['helperCleanupExitCode'] = cleanup.returncode
                 if cleanup.returncode:
                     report['status'] = 'failed'

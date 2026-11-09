@@ -56,7 +56,10 @@ where
     P: serde::Serialize + for<'de> serde::Deserialize<'de>,
     R: for<'de> serde::Deserialize<'de>,
 {
-    let client = connect().await?;
+    // After wake, verifying the peer can take longer than the normal 50 ms probe.
+    // Give renewal its own handshake budget within the desktop heartbeat deadline.
+    let handshake_timeout = matches!(command, IpcCommand::RenewOwner).then(|| Duration::from_millis(750));
+    let client = connect_with_handshake_timeout(handshake_timeout).await?;
     let body = match session {
         None => AuthenticatedRequest {
             credentials: credentials.clone(),
@@ -108,6 +111,10 @@ pub async fn set_config(config: Option<IpcConfig>) {
 }
 
 pub async fn connect() -> Result<IpcHttpClient> {
+    connect_with_handshake_timeout(None).await
+}
+
+async fn connect_with_handshake_timeout(handshake_timeout: Option<Duration>) -> Result<IpcHttpClient> {
     debug!("Connecting to IPC at {}", IPC_PATH);
 
     #[cfg(unix)]
@@ -135,12 +142,14 @@ pub async fn connect() -> Result<IpcHttpClient> {
         },
     )?;
 
-    if let Err(e) = client
+    let probe = client
         .get(IpcCommand::Magic.as_ref())
-        .header(IPC_AUTH_HEADER_KEY, IPC_AUTH_EXPECT)
-        .send()
-        .await
-    {
+        .header(IPC_AUTH_HEADER_KEY, IPC_AUTH_EXPECT);
+    let probe = match handshake_timeout {
+        Some(timeout) => probe.timeout(timeout),
+        None => probe,
+    };
+    if let Err(e) = probe.send().await {
         warn!("Failed to connect to IPC server: {}", e);
         return Err(anyhow::anyhow!("Failed to connect to IPC server: {}", e));
     }
@@ -190,6 +199,16 @@ pub async fn start_clash(
         Some(LIFECYCLE_TIMEOUT),
     )
     .await
+}
+
+/// Conditional start: an old client must never take over a newer owner's core.
+pub async fn reconnect_clash(
+    credentials: &OwnerCredentials,
+    expired_generation: u64,
+    body: &StartClashRequest,
+) -> Result<Response<StartClashResult>> {
+    protected_call(Verb::Post, IpcCommand::ReconnectClash, credentials, None,
+        (expired_generation, body.clone()), Some(LIFECYCLE_TIMEOUT)).await
 }
 
 pub async fn get_clash_logs(credentials: &OwnerCredentials) -> Result<Response<Vec<String>>> {

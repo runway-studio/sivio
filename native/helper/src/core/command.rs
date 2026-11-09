@@ -19,6 +19,8 @@ pub enum IpcCommand {
 
     #[strum(serialize = "/clash/start")]
     StartClash,
+    #[strum(serialize = "/clash/reconnect")]
+    ReconnectClash,
     #[strum(serialize = "/owner/renew")]
     RenewOwner,
     #[strum(serialize = "/core/control")]

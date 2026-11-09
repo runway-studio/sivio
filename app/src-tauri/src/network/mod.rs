@@ -1033,6 +1033,10 @@ pub(crate) async fn resume_after_update_failure(app: &tauri::AppHandle, state: &
 pub async fn shutdown(state: &NetworkState) -> Result<()> {
     stop_inner(&mut *state.runtime.lock().await).await
 }
+pub async fn shutdown_for_exit(state: &NetworkState) -> Result<()> {
+    let _write = state.write.lock().await;
+    shutdown(state).await
+}
 fn require_compatible_helper(info: &ipc::ProtocolInfo) -> Result<()> {
     ensure!(info.supports_client(ipc::ProtocolVersion::current(), ipc::MIN_REQUIRED_SERVICE_REVISION),
         "Sivio 服务需要升级到 revision 13。请在网络设置中安装 / 修复服务，完成系统授权后重试。");
@@ -1091,6 +1095,7 @@ async fn start(app: &tauri::AppHandle, state: &NetworkState, catalog: &Catalog) 
 
 #[derive(Default)]
 struct StartPolicy {
+    expired_generation: Option<u64>,
     suspend_proxy: bool,
     destination_approved: bool,
 }
@@ -1111,6 +1116,7 @@ async fn start_with_proxy_policy(app: &tauri::AppHandle, state: &NetworkState, c
     let mut requirements = catalog.settings.clone();
     if policy.suspend_proxy { requirements.system_proxy = false; }
     let managed = managed_mode(&requirements).await?;
+    ensure!(policy.expired_generation.is_none() || managed, "网络服务尚未恢复");
     port::check_settings(&catalog.settings, None, managed)?;
     let socket = if managed {
         PathBuf::from(ipc::mihomo_ipc_path(&credentials()?.identity))
@@ -1186,20 +1192,20 @@ async fn start_with_proxy_policy(app: &tauri::AppHandle, state: &NetworkState, c
                 .filter(|_| !policy.suspend_proxy)
                 .map(|_| proxy_guard::config(&catalog.settings));
             let owner = credentials()?;
-            let response = ipc::start_clash(
-                &owner,
-                &ipc::StartClashRequest {
-                    runtime: ipc::RuntimeBundle {
-                        yaml: yaml.clone(),
-                        assets: vec![],
-                        remote_providers: providers,
-                        core_path: rootcore.to_string_lossy().into_owned(),
-                    },
-                    proposed_session_token: token.clone(),
-                    macos_proxy: proxy,
+            let request = ipc::StartClashRequest {
+                runtime: ipc::RuntimeBundle {
+                    yaml: yaml.clone(),
+                    assets: vec![],
+                    remote_providers: providers,
+                    core_path: rootcore.to_string_lossy().into_owned(),
                 },
-            )
-            .await?;
+                proposed_session_token: token.clone(),
+                macos_proxy: proxy,
+            };
+            let response = match policy.expired_generation {
+                Some(expired) => ipc::reconnect_clash(&owner, expired, &request).await?,
+                None => ipc::start_clash(&owner, &request).await?,
+            };
             ensure!(
                 response.code == 0,
                 "helper start failed: {}",
@@ -1466,7 +1472,7 @@ async fn install(app: &tauri::AppHandle) -> Result<Value> {
     // The preparation switch must be first; signer arguments follow it.
     let mut signer_args = Vec::new();
     if let Some(pin) = service_setup::signer_pin(&requirement) { signer_args.extend(["--client-signer", pin]); }
-    let status = Command::new(resource(app, "clash-verge-service-install")?)
+    let status = Command::new(resource(app, "sivio-helper-install")?)
         .arg("--prepare-install").args(signer_args)
         .args([
             "--prompt",
@@ -1609,10 +1615,12 @@ fn start_workers(app: tauri::AppHandle, state: NetworkState) {
     });
     tauri::async_runtime::spawn(async move {
         let mut timer = tokio::time::interval(Duration::from_secs(5));
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             timer.tick().await;
             let mut runtime = state.runtime.lock().await;
             let before = (runtime.phase.clone(), runtime.error.clone(), runtime.port);
+            let mut stale = false;
             if let Some(heartbeat) = &runtime.lease {
                 match heartbeat.latest() {
                     Ok(()) => {
@@ -1633,6 +1641,7 @@ fn start_workers(app: tauri::AppHandle, state: NetworkState) {
                         }
                     }
                     Err(detail) => {
+                        stale = detail == lease::RenewalError::Stale && !runtime.recovery_required;
                         if let Some(job) = &mut runtime.media {
                             job.cancel();
                         }
@@ -1640,7 +1649,11 @@ fn start_workers(app: tauri::AppHandle, state: NetworkState) {
                         runtime.error = Some(if service_setup::running_code_changed().await {
                             service_setup::APP_RESTART_MESSAGE.into()
                         } else {
-                            format!("helper lease renewal failed; recovery is owned by the service: {detail}")
+                            match detail {
+                                lease::RenewalError::Stale if stale => "网络服务会话已失效，正在尝试重新连接…".into(),
+                                lease::RenewalError::Stale => "网络服务会话已失效，请先清理并停止，再重新启动网络".into(),
+                                lease::RenewalError::Other(detail) => format!("网络服务连接暂时中断，正在重试：{detail}"),
+                            }
                         });
                         runtime.port = None;
                         outbound::core(None, runtime.generation, false);
@@ -1660,9 +1673,13 @@ fn start_workers(app: tauri::AppHandle, state: NetworkState) {
                 }
             }
             let changed = before != (runtime.phase.clone(), runtime.error.clone(), runtime.port);
+            let generation = runtime.generation;
             drop(runtime);
             if changed {
                 let _ = app.emit("network-runtime-changed", ());
+            }
+            if stale {
+                lease::reconnect(&app, &state, generation).await;
             }
         }
     });
@@ -2551,7 +2568,7 @@ async fn execute(
             let _write = state.write.lock().await;
     ensure!(!crate::update_install::installing(), "UPDATE_BUSY: 正在安装更新");
             shutdown(state).await?;
-            let status = Command::new(resource(app, "clash-verge-service-uninstall")?)
+            let status = Command::new(resource(app, "sivio-helper-uninstall")?)
                 .arg("--prepare-uninstall")
                 .status()
                 .await?;

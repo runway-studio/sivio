@@ -468,5 +468,13 @@
       "internal-company"
     ],
     "reason": "Scanner rule definitions name organization keywords to detect; no internal URL, personal data or credential value. Exact implementation digest reviewed."
+  },
+  {
+    "path": "app/src-tauri/src/lib.rs",
+    "sha256": "da9d2665ac528205bb75a4b9cef63c2ef1b7ca45892541e91f2a8b36586ce06d",
+    "rules": [
+      "url-password"
+    ],
+    "reason": "Unchanged example.com URL-redaction negative tests use synthetic user:secret and user:pass values; only network exit locking changed in this revision. Exact digest; no production credential."
   }
 ]

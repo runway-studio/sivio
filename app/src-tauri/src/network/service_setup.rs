@@ -141,6 +141,7 @@ fn launch_policy(
     StartPolicy {
         suspend_proxy,
         destination_approved: false,
+        ..Default::default()
     }
 }
 

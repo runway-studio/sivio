@@ -25,9 +25,9 @@ use std::time::{Duration, Instant};
 
 fn bundled_service_binary() -> Result<PathBuf, Error> {
     let source = std::env::current_exe()?.with_file_name(if cfg!(windows) {
-        "clash-verge-service.exe"
+        "sivio-helper.exe"
     } else {
-        "clash-verge-service"
+        "sivio-helper"
     });
     let metadata = std::fs::symlink_metadata(&source)
         .with_context(|| format!("failed to inspect bundled service binary {source:?}"))?;
@@ -752,6 +752,16 @@ fn set_macos_permissions(path: &Path, mode: u32) -> Result<(), Error> {
 }
 
 #[cfg(target_os = "macos")]
+fn remove_legacy_service_binary(macos_path: &Path) -> std::io::Result<()> {
+    // Called only after the replacement is ready, within our unchanged bundle ID.
+    // Never search for or delete another application's Clash Verge service.
+    match std::fs::remove_file(macos_path.join("clash-verge-service")) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        result => result,
+    }
+}
+
+#[cfg(target_os = "macos")]
 fn main() -> Result<(), Error> {
     if clash_verge_service_ipc::management::prepare_maintenance_if_requested()? {return Ok(())}
     let validation_args=std::env::args_os().skip(1).collect::<Vec<_>>();
@@ -788,7 +798,7 @@ fn main() -> Result<(), Error> {
 
     std::fs::create_dir_all(&macos_path).map_err(|e| anyhow::anyhow!("Failed to create bundle directories: {}", e))?;
 
-    let target_binary_path = macos_path.join("clash-verge-service");
+    let target_binary_path = macos_path.join("sivio-helper");
     let staged = stage_binary(&service_binary_path, &target_binary_path)?;
 
     let info_plist_path = contents_path.join("Info.plist");
@@ -848,6 +858,9 @@ fn main() -> Result<(), Error> {
         debug,
     )?;
     wait_for_service_ready()?;
+    if let Err(error) = remove_legacy_service_binary(&macos_path) {
+        eprintln!("Sivio helper is ready; could not remove its legacy executable: {error}");
+    }
     #[cfg(not(feature = "development-channel"))]
     let _ = uninstall_old_service();
 
@@ -872,7 +885,7 @@ fn main() -> Result<(), Error> {
     let debug = options.debug;
     let source = bundled_service_binary()?;
     let install_dir = clash_verge_service_ipc::prepare_service_install_directory()?;
-    let target = install_dir.join("clash-verge-service");
+    let target = install_dir.join("sivio-helper");
     let staged = stage_binary(&source, &target)?;
     let unit_name = format!("{}.service", clash_verge_service_ipc::SERVICE_SLUG);
     let unit_path = PathBuf::from("/etc/systemd/system").join(&unit_name);
@@ -937,7 +950,7 @@ fn main() -> anyhow::Result<()> {
     }
     let source = bundled_service_binary()?;
     let install_dir = clash_verge_service_ipc::prepare_service_install_directory()?;
-    let target = install_dir.join("clash-verge-service.exe");
+    let target = install_dir.join("sivio-helper.exe");
     let staged = stage_binary(&source, &target)?;
 
     let manager_access = ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE;
@@ -1031,7 +1044,7 @@ fn main() -> anyhow::Result<()> {
     let start_access = ServiceAccess::CHANGE_CONFIG | ServiceAccess::START;
     let service = service_manager.create_service(&service_info, start_access)?;
 
-    service.set_description("Clash Verge Service helps to launch Clash Core")?;
+    service.set_description("Sivio Network Helper manages the network core")?;
     configure_windows_service_recovery(&service)?;
     service.start(&Vec::<&OsStr>::new())?;
     wait_for_service_ready()?;
@@ -1384,6 +1397,25 @@ mod core_install_argument_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn renamed_helper_cleanup_preserves_replacement_and_other_apps() -> anyhow::Result<()> {
+        let root = tempfile::tempdir()?;
+        let own = root.path().join("local.siassist.desktop.service.bundle/Contents/MacOS");
+        let foreign = root.path().join("io.github.clash-verge-rev.clash-verge-rev.service.bundle/Contents/MacOS");
+        std::fs::create_dir_all(&own)?;
+        std::fs::create_dir_all(&foreign)?;
+        std::fs::write(own.join("clash-verge-service"), b"legacy")?;
+        std::fs::write(own.join("sivio-helper"), b"replacement")?;
+        std::fs::write(foreign.join("clash-verge-service"), b"foreign")?;
+        remove_legacy_service_binary(&own)?;
+        remove_legacy_service_binary(&own)?;
+        assert!(!own.join("clash-verge-service").exists());
+        assert_eq!(std::fs::read(own.join("sivio-helper"))?, b"replacement");
+        assert_eq!(std::fs::read(foreign.join("clash-verge-service"))?, b"foreign");
+        Ok(())
+    }
 
     #[test]
     fn missing_launchd_service_skips_bootout() {

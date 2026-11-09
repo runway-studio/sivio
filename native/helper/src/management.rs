@@ -127,7 +127,7 @@ impl Staging {
             let nonce = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
                 .as_nanos();
-            let root = std::env::temp_dir().join(format!("clash-verge-install-{}-{nonce}-{index}", std::process::id()));
+            let root = std::env::temp_dir().join(format!("sivio-helper-install-{}-{nonce}-{index}", std::process::id()));
             let builder = std::fs::DirBuilder::new();
             #[cfg(unix)]
             let mut builder = builder;
@@ -223,7 +223,7 @@ pub fn prepare_install_if_requested() -> Result<bool> {
     let mut client_signers = Vec::new();
     let mut ensure = false;
     let mut core_only = false;
-    let mut prompt = "Install Clash Verge service and approved cores".to_owned();
+    let mut prompt = "Install Sivio network helper and approved cores".to_owned();
     #[cfg(unix)]
     let mut gid = unsafe { platform_lib::getgid() };
     while let Some(argument) = arguments.next() {
@@ -273,7 +273,7 @@ pub fn prepare_install_if_requested() -> Result<bool> {
         }
     }
     let installer = std::env::current_exe()?;
-    let service = installer.with_file_name(format!("clash-verge-service{}", std::env::consts::EXE_SUFFIX));
+    let service = installer.with_file_name(format!("sivio-helper{}", std::env::consts::EXE_SUFFIX));
     let PreparedCores {
         staging,
         requirements,
