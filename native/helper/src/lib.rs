@@ -85,7 +85,8 @@ pub const MIN_SUPPORTED_CLIENT_REVISION: u16 = 7;
 // Revision 13 accepts root-pinned stable desktop signing certificates.
 // Revision 12 releases the lifecycle lock for bounded per-proxy delay reads.
 // Session proofs are checked both before and after all observation reads.
-pub const MIN_REQUIRED_SERVICE_REVISION: u16 = 13;
+// Revision 14 is required so every managed run can recover an expired session.
+pub const MIN_REQUIRED_SERVICE_REVISION: u16 = 14;
 /// Conditional reconnection of an expired owner without displacing a newer session.
 pub const MIN_SERVICE_REVISION_FOR_RECONNECT: u16 = 14;
 /// Revision that introduced `/clash/stage-runtime`.

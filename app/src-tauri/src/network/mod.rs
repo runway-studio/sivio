@@ -1039,7 +1039,7 @@ pub async fn shutdown_for_exit(state: &NetworkState) -> Result<()> {
 }
 fn require_compatible_helper(info: &ipc::ProtocolInfo) -> Result<()> {
     ensure!(info.supports_client(ipc::ProtocolVersion::current(), ipc::MIN_REQUIRED_SERVICE_REVISION),
-        "Sivio 服务需要升级到 revision 13。请在网络设置中安装 / 修复服务，完成系统授权后重试。");
+        "Sivio 服务需要升级到 revision 14。请在网络设置中安装 / 修复服务，完成系统授权后重试。");
     Ok(())
 }
 async fn managed_mode(settings: &Settings) -> Result<bool> {
