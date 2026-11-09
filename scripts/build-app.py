@@ -151,7 +151,7 @@ def main():
  call(['/usr/bin/codesign','--verify','--deep','--strict','--verbose=2',str(destination)],f'app-{args.arch}-signature.log',env)
  zip_path=output/(f'{product}-{version}-{args.arch}.zip' if args.release_distribution else f'{product}-{version}-{args.arch}-internal.zip')
  zip_staging=destination.parent/(zip_path.name+'.tmp')
- subprocess.run(['/usr/bin/ditto','-c','-k','--sequesterRsrc','--keepParent',str(destination),str(zip_staging)],check=True)
+ subprocess.run(['/usr/bin/ditto','-c','-k','--norsrc','--noextattr','--keepParent',str(destination),str(zip_staging)],check=True)
  zip_staging.replace(zip_path)
  update_path=output/f'{product}-{version}-{args.arch}.app.tar.gz'
  update_staging=destination.parent/(update_path.name+'.tmp')
