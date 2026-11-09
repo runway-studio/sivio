@@ -15,6 +15,21 @@ spec.loader.exec_module(build)
 
 
 class ReleaseBuild(unittest.TestCase):
+    def test_release_path_remapping_preserves_flags_and_paths_with_spaces(self):
+        original = {'RUSTFLAGS': '--cfg release_check -C "link-arg=two words"'}
+        with patch.object(build, 'ROOT', Path('/workspace/project with spaces')):
+            env = build.release_compile_environment(original)
+        flags = env['CARGO_ENCODED_RUSTFLAGS'].split('\x1f')
+        self.assertEqual(flags[:4], ['--cfg', 'release_check', '-C', 'link-arg=two words'])
+        self.assertEqual(flags[-1], '--remap-path-prefix=/workspace/project with spaces=/build/sivio')
+        self.assertNotIn('RUSTFLAGS', env)
+        self.assertIn('RUSTFLAGS', original)
+
+    def test_release_path_remapping_honors_encoded_flag_precedence(self):
+        env = build.release_compile_environment({'RUSTFLAGS': '--cfg ignored', 'CARGO_ENCODED_RUSTFLAGS': '--cfg\x1falready_encoded'})
+        self.assertEqual(env['CARGO_ENCODED_RUSTFLAGS'].split('\x1f')[:2], ['--cfg', 'already_encoded'])
+        self.assertNotIn('ignored', env['CARGO_ENCODED_RUSTFLAGS'])
+
     def test_release_never_creates_an_identity_implicitly(self):
         with patch.dict(os.environ, {}, clear=True), self.assertRaises(ValueError):
             with identity():

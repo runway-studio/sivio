@@ -1,8 +1,19 @@
 #!/usr/bin/env python3
 """Build the real Sivio single-host application with fixed network resources."""
-import argparse,gzip,hashlib,json,lzma,os,shutil,struct,subprocess,tarfile,time,importlib.util,uuid,sys
+import argparse,gzip,hashlib,json,lzma,os,shutil,shlex,struct,subprocess,tarfile,time,importlib.util,uuid,sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
+def release_compile_environment(env):
+ """Keep panic/source locations useful without publishing the builder's home path."""
+ env=env.copy()
+ encoded=env.get('CARGO_ENCODED_RUSTFLAGS')
+ flags=encoded.split('\x1f') if encoded else shlex.split(env.get('RUSTFLAGS',''))
+ # Rust uses the last matching mapping; the repository is more specific than home.
+ flags.extend([f'--remap-path-prefix={Path.home()}=/build/home',f'--remap-path-prefix={ROOT}=/build/sivio'])
+ env['CARGO_ENCODED_RUSTFLAGS']='\x1f'.join(flags)
+ env.pop('RUSTFLAGS',None)
+ return env
+
 def prepare_core_bundle(net, target):
  """One offline stream shares the dictionary between two pinned executables."""
  cores=[]
@@ -87,6 +98,7 @@ def main():
  import platform
  cross=args.arch != ('aarch64' if platform.machine() in ('arm64','aarch64') else 'x86_64')
  env=os.environ.copy();env.update(CARGO_HOME=str(ROOT/'build/cache/cargo'),RUSTUP_TOOLCHAIN='1.99.0',MACOSX_DEPLOYMENT_TARGET='12.0',PATH='/usr/bin:/bin:/opt/homebrew/bin:'+env.get('PATH',''))
+ if args.release_distribution: env=release_compile_environment(env)
  resources=ROOT/'app/src-tauri/resources';net=resources/'network';legal=resources/'legal';net.mkdir(parents=True,exist_ok=True);legal.mkdir(parents=True,exist_ok=True)
  if not args.skip_helper_build:
   call(['cargo','build','--manifest-path','native/helper/Cargo.toml','--features','standalone,client','--bins']+cargo_profile+(['--target',target] if cross else []),f'helper-{args.arch}-package.log',env)
