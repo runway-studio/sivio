@@ -2,13 +2,30 @@ import unittest
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
-from publish import publication_policy, verify_local
+from unittest.mock import Mock, patch
+from publish import find_release, publication_policy, verify_local
 from manifest import sha, build_manifest
 from test_manifest import write_payload
 
 
 class Publication(unittest.TestCase):
+    def test_interrupted_draft_is_found_after_tag_endpoint_returns_404(self):
+        draft = {'id': 123, 'tag_name': 'v0.2.0', 'draft': True}
+        github = Mock()
+        github.api.side_effect = [None, [{'tag_name': 'v0.1.0'}] * 100, [draft]]
+        self.assertEqual(find_release(github, 'v0.2.0'), draft)
+        github.api.assert_any_call('/releases?per_page=100&page=2')
+
+    def test_published_release_is_preserved_and_duplicate_drafts_are_rejected(self):
+        published = {'tag_name': 'v0.2.0', 'draft': False}
+        github = Mock()
+        github.api.return_value = published
+        self.assertEqual(find_release(github, 'v0.2.0'), published)
+        self.assertEqual(github.api.call_count, 1)
+        github.api.side_effect = [None, [{'tag_name': 'v0.2.0', 'draft': True}] * 2]
+        with self.assertRaises(ValueError):
+            find_release(github, 'v0.2.0')
+
     def test_verified_set_rejects_missing_tampered_and_unrelated_assets(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

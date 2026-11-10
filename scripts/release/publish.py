@@ -63,6 +63,25 @@ def publication_policy(tag, existing, latest):
     return prerelease
 
 
+def find_release(github, tag):
+    # The tag endpoint can return 404 for a draft. Look through authenticated
+    # release listings before creating anything, so interrupted uploads resume.
+    published = github.api('/releases/tags/' + tag, optional=True)
+    if published:
+        return published
+    matches = []
+    page = 1
+    while True:
+        releases = github.api(f'/releases?per_page=100&page={page}')
+        matches.extend(release for release in releases if release['tag_name'] == tag)
+        if len(releases) < 100:
+            break
+        page += 1
+    if len(matches) > 1:
+        raise ValueError('Multiple releases use this tag; resolve duplicate drafts before publishing')
+    return matches[0] if matches else None
+
+
 class Github:
     def __init__(self, repo):
         self.base = f'https://api.github.com/repos/{repo}'
@@ -117,7 +136,7 @@ def main():
         raise ValueError('Official updater assets must be anonymously readable; repository is private')
     if github.api('/commits/' + args.tag)['sha'] != args.sha:
         raise ValueError('Remote tag no longer matches the built source')
-    existing = github.api('/releases/tags/' + args.tag, optional=True)
+    existing = find_release(github, args.tag)
     latest = github.api('/releases/latest', optional=True)
     prerelease = publication_policy(args.tag, existing, latest)
     if existing and existing['target_commitish'] != args.sha:
