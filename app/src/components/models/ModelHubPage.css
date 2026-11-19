@@ -11,6 +11,17 @@
   max-height: 52vh;
   min-height: 180px;
 }
+.model-picker-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+@container (min-width: 780px) {
+  .model-picker-workspace-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(260px, 1fr);
+  }
+}
 @container (min-width: 780px) {
   .model-picker-body {
     grid-template-columns: minmax(0, 1fr) 300px;

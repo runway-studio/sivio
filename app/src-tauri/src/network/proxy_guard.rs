@@ -1,9 +1,18 @@
 //! Observe shared macOS proxy ownership without coupling it to the independent core lifetime.
 use super::*;
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Inspection {
+    #[default]
+    Ready,
+    NoNetwork,
+    Unavailable,
+}
+
 #[derive(Default)]
 pub(super) struct Guard {
     pub last: Option<std::time::Instant>,
     pub tripped: bool,
+    pub inspection: Inspection,
     target: Option<(Duration, ipc::MacosProxyConfig)>,
 }
 impl Guard {
@@ -94,12 +103,10 @@ pub(super) async fn suspended(
     if tripped || !managed_running || !settings.system_proxy {
         return Ok(tripped);
     }
-    Ok(
-        tauri::async_runtime::spawn_blocking(sysproxy::Sysproxy::snapshot)
-            .await?
-            .as_ref()
-            .map_or(true, |actual| changed(actual, &config(settings))),
-    )
+    let actual = tauri::async_runtime::spawn_blocking(sysproxy::Sysproxy::snapshot)
+        .await?
+        .context("暂时无法核对系统代理，请稍后重试")?;
+    Ok(changed(&actual, &config(settings)))
 }
 pub(super) async fn reconcile(runtime: &mut Runtime) {
     let Some((interval, desired)) = runtime.proxy_guard.target.clone() else {
@@ -117,22 +124,36 @@ pub(super) async fn reconcile(runtime: &mut Runtime) {
     }
     runtime.proxy_guard.last = Some(std::time::Instant::now());
     let actual = tauri::async_runtime::spawn_blocking(sysproxy::Sysproxy::snapshot).await;
-    observe(
-        runtime,
-        actual.as_ref().ok().and_then(|result| result.as_ref().ok()),
-        &desired,
-    );
+    let observation = match &actual {
+        Ok(Ok(snapshot)) => Observation::Snapshot(snapshot),
+        Ok(Err(sysproxy::Error::NoActiveNetworkService)) => Observation::NoNetwork,
+        _ => Observation::Unavailable,
+    };
+    observe(runtime, observation, &desired);
+}
+
+enum Observation<'a> {
+    Snapshot(&'a sysproxy::ProxySnapshot),
+    NoNetwork,
+    Unavailable,
 }
 
 fn observe(
     runtime: &mut Runtime,
-    actual: Option<&sysproxy::ProxySnapshot>,
+    actual: Observation<'_>,
     desired: &ipc::MacosProxyConfig,
 ) {
-    if actual.is_none_or(|snapshot| changed(snapshot, desired)) {
-        // Disabled is also an external edit. Do not write, clear the helper journal,
-        // stop the core, or turn an ownership warning into a runtime failure.
-        runtime.proxy_guard.tripped = true;
+    runtime.proxy_guard.inspection = match actual {
+        Observation::NoNetwork => Inspection::NoNetwork,
+        Observation::Unavailable => Inspection::Unavailable,
+        Observation::Snapshot(snapshot) => {
+            runtime.proxy_guard.tripped = changed(snapshot, desired);
+            Inspection::Ready
+        }
+    };
+    if runtime.proxy_guard.inspection != Inspection::Ready {
+        // No trustworthy observation yet. Retry at the next health tick without writing.
+        runtime.proxy_guard.last = None;
     }
 }
 
@@ -195,13 +216,34 @@ mod tests {
         ours.https = endpoint.clone();
         ours.socks = endpoint;
         ours.bypass = "localhost,127.*,::1".into();
-        observe(&mut runtime, Some(&ours), &desired);
+        observe(&mut runtime, Observation::Snapshot(&ours), &desired);
+        assert!(!runtime.proxy_guard.tripped);
+        runtime.proxy_guard.last = Some(std::time::Instant::now());
+        observe(&mut runtime, Observation::NoNetwork, &desired);
+        assert!(!runtime.proxy_guard.tripped);
+        assert!(runtime.proxy_guard.inspection == Inspection::NoNetwork);
+        assert!(runtime.proxy_guard.last.is_none());
+        assert_eq!(runtime.phase, "running");
+        assert_eq!(runtime.session.as_ref().unwrap().generation, 7);
+        observe(&mut runtime, Observation::Snapshot(&ours), &desired);
+        assert!(runtime.proxy_guard.inspection == Inspection::Ready);
+        assert!(!runtime.proxy_guard.tripped);
+        observe(&mut runtime, Observation::Unavailable, &desired);
+        assert!(!runtime.proxy_guard.tripped);
+        assert!(runtime.proxy_guard.inspection == Inspection::Unavailable);
+        assert!(runtime.proxy_guard.last.is_none());
+        observe(&mut runtime, Observation::Snapshot(&ours), &desired);
+        assert!(runtime.proxy_guard.inspection == Inspection::Ready);
         assert!(!runtime.proxy_guard.tripped);
         let mut other = ours.clone();
         other.http.port = 7890;
-        for actual in [Some(sysproxy::ProxySnapshot::default()), Some(other), None] {
-            observe(&mut runtime, actual.as_ref(), &desired);
+        for actual in [sysproxy::ProxySnapshot::default(), other] {
+            runtime.proxy_guard = Guard::configured(&settings);
+            observe(&mut runtime, Observation::NoNetwork, &desired);
+            observe(&mut runtime, Observation::Unavailable, &desired);
+            observe(&mut runtime, Observation::Snapshot(&actual), &desired);
             assert!(runtime.proxy_guard.tripped);
+            assert!(runtime.proxy_guard.inspection == Inspection::Ready);
             assert_eq!(runtime.phase, "running");
             assert_eq!(runtime.port, Some(7891));
             assert_eq!(runtime.session.as_ref().unwrap().generation, 7);

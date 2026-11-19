@@ -4,6 +4,7 @@ export const APP_RESTART_MESSAGE =
   "Sivio 运行期间 App 文件已被替换或删除，请完全退出后从应用程序目录打开完整的 App，再启用网络。";
 
 const english: Record<string, string> = {
+  "节点已切换，但关闭旧连接失败，可在连接页重试。": "The node switched, but closing existing connections failed. Retry in Connections.",
   [APP_RESTART_MESSAGE]:
     "The app files were replaced or deleted while Sivio was running. Quit Sivio completely, open an intact copy from Applications, then enable networking again.",
   " · 需要重新打开 App": " · Reopen the app required",

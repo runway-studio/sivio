@@ -18,13 +18,13 @@ pub(super) async fn probe(state: &NetworkState, args: &Value) -> Result<Value> {
     let generation = args["generation"]
         .as_u64()
         .context("Network generation required")?;
-    let port = {
+    let (port, selection_epoch) = {
         let runtime = state.runtime.lock().await;
         ensure!(
             runtime.phase == "running" && runtime.generation == generation,
             "Start Sivio network or refresh before testing"
         );
-        runtime.port.context("Network port unavailable")?
+        (runtime.port.context("Network port unavailable")?, outbound::selection_epoch())
     };
     // Loopback clients are exempt from LAN authentication in generated core configs.
     let proxy = reqwest::Proxy::all(format!("http://127.0.0.1:{port}"))?;
@@ -65,7 +65,7 @@ pub(super) async fn probe(state: &NetworkState, args: &Value) -> Result<Value> {
     }
     let runtime = state.runtime.lock().await;
     ensure!(
-        runtime.phase == "running" && runtime.generation == generation,
+        runtime.phase == "running" && runtime.generation == generation && outbound::selection_epoch() == selection_epoch,
         "Network changed during request; retry required"
     );
     Ok(result)

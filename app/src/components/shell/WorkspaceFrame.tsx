@@ -25,7 +25,7 @@ export function WorkspaceFrame({
         aria-label={
           i18n.language.startsWith("zh") ? "当前位置" : "Current location"
         }
-        className="sivio-window-bar flex h-11 min-w-0 shrink-0 items-center gap-2 text-caption text-fg-3"
+        className="sivio-window-bar flex h-8 min-w-0 shrink-0 items-center gap-2 text-caption text-fg-3"
       >
         <span {...DRAG_REGION_ATTR} className="shrink-0 font-medium text-fg-2">
           {t("app.title")}

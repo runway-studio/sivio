@@ -39,7 +39,7 @@ def prepare_core_bundle(net, target):
  # Remove only superseded generated resources, never the source/cache binaries.
  for name in ['mihomo.gz','mihomo-alpha.gz']: (net/name).unlink(missing_ok=True)
 
-def package_source(output, product, version):
+def package_source(output, product, version, *, include_untracked=False):
  """Publish immutable matching source beside the App, outside runtime resources."""
  output.mkdir(parents=True,exist_ok=True)
  staging=output/f'.{product}-source-{uuid.uuid4().hex}.tar.gz'
@@ -47,7 +47,9 @@ def package_source(output, product, version):
   with tarfile.open(staging,'w:gz') as archive:
    folders=['app','native','scripts','openspec','docs','vendor/upstream','vendor/dependency-notices','vendor/cores','.github']
    files={'README.md','LICENSE','.cargo/config.toml','.gitignore','build/reports/upstream-manifest.json'}
-   tracked=subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\0')
+   # A public source archive must be reproducible from its tagged commit.
+   extra=['--others','--exclude-standard'] if include_untracked else []
+   tracked=subprocess.check_output(['git','ls-files','--cached',*extra,'-z'],cwd=ROOT).decode().split('\0')
    def normalize(info):
     info.uid=info.gid=0;info.uname=info.gname='';info.pax_headers={};info.mtime=0
     return info
@@ -129,7 +131,7 @@ def main():
  (ROOT/'app/src-tauri/tauri.conf.json').write_text(json.dumps(config,ensure_ascii=False,indent=2)+'\n')
  output=ROOT/'dist'/f'{"release" if args.release_distribution else "internal"}-{args.arch}'
  source_dirty=source_dirty or bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=normal'],cwd=ROOT))
- source_archive,source_digest=package_source(output,config['productName'],config['version'])
+ source_archive,source_digest=package_source(output,config['productName'],config['version'],include_untracked=not args.release_distribution)
  (legal/'SOURCE.txt').write_text(f'Corresponding source for this exact Sivio build is supplied separately at the same download location, at no additional charge.\nFile: {source_archive.name}\nSHA256: {source_digest}\nRedistributors must preserve equivalent access to the corresponding source and all license notices.\nThe source archive is not needed to run the App offline.\n',encoding='utf-8')
  call(['pnpm','tauri','build']+(['--debug'] if args.debug else [])+['--features','custom-protocol'+(',upgrade-validation' if args.upgrade_validation else ''),'--bundles','app']+(['--target',target] if cross else []),f'app-{args.arch}-package.log',env,ROOT/'app')
  product=config['productName'];version=config['version']

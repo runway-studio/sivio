@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
@@ -98,9 +104,10 @@ function mount() {
     update: (value: NetworkSnapshot) => view.rerender(ui(value)),
   };
 }
-it("opens the existing outbound settings from the shared readiness panel", () => {
+it("opens the existing outbound settings from the shared readiness panel", async () => {
   const view = mount();
-  fireEvent.click(screen.getByRole("button", { name: "检查出口设置" }));
+  fireEvent.click(screen.getByText("客户端诊断与详细状态"));
+  fireEvent.click(await screen.findByRole("button", { name: "检查出口设置" }));
   expect(view.navigate).toHaveBeenCalledWith("设置");
 });
 it("shows subscription usage, hides outbound IP by default and selects nodes with a generation guard", async () => {
@@ -114,11 +121,13 @@ it("shows subscription usage, hides outbound IP by default and selects nodes wit
   fireEvent.click(screen.getByRole("button", { name: "显示 IP" }));
   expect(screen.getByText("203.0.113.1")).toBeInTheDocument();
   await waitFor(() =>
-    expect(screen.getByLabelText("当前节点选择")).toHaveValue("Hong Kong"),
+    expect(screen.getByRole("button", { name: "切换节点" })).toBeEnabled(),
   );
-  fireEvent.change(screen.getByLabelText("当前节点选择"), {
+  fireEvent.click(screen.getByRole("button", { name: "切换节点" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "搜索节点" }), {
     target: { value: "Japan" },
   });
+  fireEvent.click(screen.getByRole("button", { name: "Japan" }));
   await waitFor(() =>
     expect(invoke).toHaveBeenCalledWith("network_command", {
       action: "controller",
@@ -175,7 +184,7 @@ it("stops queries and clears live details when the network stops; profile switch
   });
   expect(screen.queryByText("AS64500")).not.toBeInTheDocument();
   expect(screen.getByLabelText("当前订阅")).toBeEnabled();
-  expect(screen.getByLabelText("当前节点选择")).toBeDisabled();
+  expect(screen.getByRole("button", { name: "切换节点" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "检测全部" })).toBeDisabled();
   view.unmount();
 });
@@ -272,4 +281,184 @@ it("shows external takeover as inactive and explicitly reapplies without restart
       .mock.calls.some(([, args]: any) => args?.action === "settings.save"),
   ).toBe(false);
   view.unmount();
+});
+
+it("retains the observed node and permits retry after a failed node write", async () => {
+  const original = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation((cmd, p: any) =>
+    p?.action === "controller" && p.args.method === "PUT"
+      ? Promise.reject(new Error("Node selection rejected"))
+      : original(cmd, p),
+  );
+  const view = mount();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "切换节点" })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "切换节点" }));
+  fireEvent.click(screen.getByRole("button", { name: "Japan" }));
+  expect(
+    await screen.findByText("Node selection rejected"),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Hong Kong" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(screen.getByRole("button", { name: "Japan" })).toBeEnabled();
+  view.unmount();
+});
+
+it("invalidates completed and in-flight target checks across a live node switch", async () => {
+  const original = vi.mocked(invoke).getMockImplementation()!;
+  let finish!: (value: unknown) => void;
+  vi.mocked(invoke).mockImplementation((cmd, p: any) =>
+    p?.action === "home.probe" && p.args.id === "github"
+      ? new Promise((resolve) => {
+          finish = resolve;
+        })
+      : original(cmd, p),
+  );
+  const view = mount();
+  fireEvent.click(screen.getByRole("button", { name: /Google/ }));
+  await screen.findByText("35 ms · HTTP 204");
+  fireEvent.click(screen.getByRole("button", { name: /GitHub/ }));
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  fireEvent.click(screen.getByRole("button", { name: "切换节点" }));
+  fireEvent.click(screen.getByRole("button", { name: "Japan" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  await act(async () =>
+    finish({ elapsedMs: 17, httpStatus: 200, successfulHttpResponse: true }),
+  );
+  expect(screen.getByRole("button", { name: /Google/ })).toHaveTextContent(
+    "点击检测",
+  );
+  expect(screen.getByRole("button", { name: /GitHub/ })).toHaveTextContent(
+    "点击检测",
+  );
+  fireEvent.click(screen.getByRole("button", { name: /Google/ }));
+  await screen.findByText("35 ms · HTTP 204");
+  view.update({
+    ...snapshot,
+    runtime: { ...snapshot.runtime, selectionEpoch: 2 },
+  });
+  expect(screen.getByRole("button", { name: /Google/ })).toHaveTextContent(
+    "点击检测",
+  );
+});
+
+it("reads back a committed node and retries only connection cleanup", async () => {
+  const original = vi.mocked(invoke).getMockImplementation()!;
+  let selected = "Hong Kong";
+  vi.mocked(invoke).mockImplementation(async (cmd, p: any) => {
+    if (p?.action === "controller" && p.args.method === "PUT") {
+      selected = p.args.body.name;
+      return { ok: true, selectionApplied: true, connectionCleanup: "failed" };
+    }
+    const value: any = await original(cmd, p);
+    if (value?.proxies) value.proxies["Proxy / 代理"].now = selected;
+    return value;
+  });
+  mount();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "切换节点" })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "切换节点" }));
+  fireEvent.click(screen.getByRole("button", { name: "Japan" }));
+  await screen.findByText("已切换到 Japan，但关闭旧连接失败。");
+  expect(screen.getByRole("button", { name: "Japan" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "重试关闭当前所有连接" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  expect(invoke).toHaveBeenCalledWith("network_command", {
+    action: "controller",
+    args: {
+      method: "DELETE",
+      path: "/connections",
+      expectedGeneration: 3,
+    },
+  });
+  expect(
+    vi
+      .mocked(invoke)
+      .mock.calls.filter(([, p]: any) => p?.args?.method === "PUT"),
+  ).toHaveLength(1);
+});
+
+it("reads nodes once after a switch and lets the selector finish before the outbound lookup", async () => {
+  const view = mount();
+  await screen.findByText("AS64500");
+  fireEvent.click(screen.getByText("客户端诊断与详细状态"));
+  await screen.findByRole("button", { name: "检查出口设置" });
+  view.client.setQueryData(["network", "snapshot"], snapshot);
+  view.client.setQueryData(["providers", "claude"], { provider: "unchanged" });
+  view.client.setQueryData(["network", "home", "ip", 2], { ip: "old" });
+  const original = vi.mocked(invoke).getMockImplementation()!;
+  let finishIp!: (value: unknown) => void;
+  vi.mocked(invoke)
+    .mockClear()
+    .mockImplementation((cmd, p: any) =>
+      p?.action === "home.probe" && p.args.id === "ip"
+        ? new Promise((resolve) => {
+            finishIp = resolve;
+          })
+        : original(cmd, p),
+    );
+  fireEvent.click(screen.getByRole("button", { name: "切换节点" }));
+  fireEvent.click(screen.getByRole("button", { name: "Japan" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  const reads = vi
+    .mocked(invoke)
+    .mock.calls.map(([cmd, p]: any) =>
+      cmd === "network_command" ? (p.args.path ?? p.args.id ?? p.action) : cmd,
+    );
+  expect(reads.sort()).toEqual(
+    [
+      "/proxies/Proxy%20%2F%20%E4%BB%A3%E7%90%86",
+      "/proxies",
+      "ip",
+      "get_workspace_readiness",
+    ].sort(),
+  );
+  expect(
+    view.client.getQueryState(["network", "snapshot"])?.isInvalidated,
+  ).toBe(true);
+  expect(
+    view.client.getQueryState(["providers", "claude"])?.isInvalidated,
+  ).toBe(false);
+  expect(
+    view.client.getQueryState(["network", "home", "ip", 2])?.isInvalidated,
+  ).toBe(false);
+  await act(async () => finishIp({ ip: "203.0.113.2" }));
+});
+
+it("keeps the node selector open after a committed switch when its readback fails", async () => {
+  let selected = false;
+  const original = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation((cmd, p: any) => {
+    if (p?.args?.method === "PUT") selected = true;
+    if (selected && p?.args?.path === "/proxies")
+      return Promise.reject(new Error("Readback failed"));
+    return original(cmd, p);
+  });
+  mount();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "切换节点" })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "切换节点" }));
+  fireEvent.click(screen.getByRole("button", { name: "Japan" }));
+  await screen.findByText(/节点已应用，但读取状态失败/);
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(
+    vi
+      .mocked(invoke)
+      .mock.calls.filter(([, p]: any) => p?.args?.method === "PUT"),
+  ).toHaveLength(1);
 });

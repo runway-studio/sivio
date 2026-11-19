@@ -45,6 +45,7 @@ import { Switch } from "@/components/ui/switch";
 import JsonEditor from "@/components/JsonEditor";
 import { toast } from "@/lib/toast";
 import { NetworkNodesPanel } from "./NetworkNodesPanel";
+import { nodeListKey, refreshNodeSelection } from "./nodeSelectionQueries";
 import { networkApi as api } from "./networkApi";
 import { APP_RESTART_MESSAGE, useNetworkText } from "./networkText";
 import { DashboardLinks } from "./NetworkAdvancedSettings";
@@ -289,13 +290,17 @@ function NetworkWorkspaceContent({
       setProbe(snapshot.data.catalog.settings.latencyUrl);
   }, [snapshot.data?.catalog.settings.latencyUrl]);
   const detail = useQuery({
-    queryKey: ["network", "detail", tab, snapshot.data?.runtime.generation],
+    queryKey:
+      tab === "节点"
+        ? nodeListKey(snapshot.data?.runtime.generation)
+        : ["network", "detail", tab, snapshot.data?.runtime.generation],
     enabled: !!running && ["节点", "规则", "连接", "日志"].includes(tab),
     queryFn: () =>
       tab === "日志"
         ? api("logs")
         : api("controller", {
             method: "GET",
+            expectedGeneration: snapshot.data?.runtime.generation,
             path:
               tab === "节点"
                 ? "/proxies"
@@ -311,14 +316,19 @@ function NetworkWorkspaceContent({
     queryFn: () =>
       api("controller", { method: "GET", path: "/providers/proxies" }),
   });
-  async function run(work: () => Promise<unknown>, success?: string) {
+  async function run(
+    work: () => Promise<unknown>,
+    success?: string,
+    refresh: () => Promise<unknown> = () =>
+      client.invalidateQueries({ queryKey: ["network"] }),
+  ) {
     if (lifecycle.isError) lifecycle.reset();
     setBusy(true);
     setOperationError(null);
     try {
       const value = await work();
       if (success) toast.success(success);
-      await client.invalidateQueries({ queryKey: ["network"] });
+      await refresh();
       return value;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -381,13 +391,18 @@ function NetworkWorkspaceContent({
   const matches = (text: string) =>
     text.toLowerCase().includes(search.toLowerCase());
   const action = (method: string, path: string, body?: unknown) =>
-    run(() =>
-      api("controller", {
-        method,
-        path,
-        expectedGeneration: data?.runtime.generation,
-        ...(body === undefined ? {} : { body }),
-      }),
+    run(
+      () =>
+        api("controller", {
+          method,
+          path,
+          expectedGeneration: data?.runtime.generation,
+          ...(body === undefined ? {} : { body }),
+        }),
+      undefined,
+      method === "PUT" && path.startsWith("/proxies/")
+        ? () => refreshNodeSelection(client, data?.runtime.generation)
+        : undefined,
     );
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -1322,15 +1337,18 @@ function NetworkWorkspaceContent({
                   onSearchChange={setSearch}
                   timeout={data?.catalog.settings.latencyTimeout ?? 5000}
                   busy={busy}
-                  onSelect={(group, node) =>
-                    void action(
+                  onSelect={async (group, node) => {
+                    const result = await action(
                       "PUT",
                       `/proxies/${encodeURIComponent(group)}`,
                       {
                         name: node,
                       },
-                    )
-                  }
+                    );
+                    if (result && typeof result === "object" && "connectionCleanup" in result && result.connectionCleanup === "failed") {
+                      toast.warning(tr("节点已切换，但关闭旧连接失败，可在连接页重试。"));
+                    }
+                  }}
                 >
                   <Button
                     variant="outline"

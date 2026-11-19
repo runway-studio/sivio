@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { isProxyAppId } from "@/config/appConfig";
+import { diagnosticStartKey } from "@/lib/query/workspaceReadiness";
 import { modelHubApi } from "@/lib/api/model-hub";
 import type { AppId } from "@/lib/api";
 import {
@@ -15,9 +16,11 @@ import { Button } from "@/components/ui/button";
 export function ClientDiagnostic({
   app,
   snapshot,
+  visible = true,
 }: {
   app: AppId;
   snapshot: ReadinessSnapshot;
+  visible?: boolean;
 }) {
   const { i18n } = useTranslation();
   const zh = i18n.language.startsWith("zh");
@@ -31,11 +34,12 @@ export function ClientDiagnostic({
     queryKey: ["model-picker", app],
     queryFn: () =>
       modelHubApi.catalog(app as Parameters<typeof modelHubApi.catalog>[0]),
-    enabled: open && isProxyAppId(app),
+    enabled: visible && open && isProxyAppId(app),
   });
   const refresh = () =>
     cache.invalidateQueries({ queryKey: ["providers", app, "readiness"] });
   const start = useMutation({
+    mutationKey: diagnosticStartKey(app),
     mutationFn: () =>
       invoke<DiagnosticRun>("start_client_diagnostic", {
         appType: app,

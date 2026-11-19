@@ -63,6 +63,7 @@ pub(crate) struct LocalFacts {
     pub configured: bool,
     pub gateway_supported: bool,
     pub mode: Option<String>,
+    selected_target: Option<(String, String)>,
 }
 
 pub(crate) fn local_facts(state: &AppState, app: &AppType) -> Result<LocalFacts, String> {
@@ -106,6 +107,9 @@ pub(crate) fn local_facts(state: &AppState, app: &AppType) -> Result<LocalFacts,
         credential_epoch,
         configured: !providers.is_empty(),
         gateway_supported,
+        selected_target: catalog
+            .as_ref()
+            .and_then(|c| c.provider_id.clone().zip(c.model.clone())),
         mode: catalog.map(|c| c.mode),
     })
 }
@@ -201,7 +205,15 @@ pub(crate) fn assemble(
     };
     snapshot.diagnostic =
         super::client_diagnostic::latest(&super::client_diagnostic::Identity::from(&snapshot), now);
-    if let Some(run) = &snapshot.diagnostic {
+    apply_selected_diagnostic(&mut snapshot, local.selected_target.as_ref());
+    snapshot
+}
+
+fn apply_selected_diagnostic(snapshot: &mut Snapshot, selected: Option<&(String, String)>) {
+    if let Some(run) = snapshot.diagnostic.as_ref().filter(|run| {
+        selected
+            .is_some_and(|(provider, model)| provider == &run.provider_id && model == &run.model)
+    }) {
         let check = snapshot
             .checks
             .iter_mut()
@@ -217,7 +229,6 @@ pub(crate) fn assemble(
             _ => "diagnostic_failed",
         };
     }
-    snapshot
 }
 
 #[cfg(test)]
@@ -231,6 +242,7 @@ mod tests {
             configured: true,
             gateway_supported: supported,
             mode: Some(mode.into()),
+            selected_target: None,
         }
     }
     fn outbound(mode: &str, available: bool) -> crate::network::outbound::Observation {
@@ -253,6 +265,38 @@ mod tests {
         for i in [1, 3, 4] {
             assert_eq!(s.checks[i].state, CheckState::Unknown);
         }
+    }
+    #[test]
+    fn candidate_diagnostic_only_verifies_the_selected_provider_and_model() {
+        use super::super::client_diagnostic::{Identity, Run};
+        let mut snapshot = assemble(facts(true, "direct"), false, outbound("direct", true), 123);
+        snapshot.diagnostic = Some(Run {
+            run_id: "test".into(),
+            app: "claude".into(),
+            provider_id: "p".into(),
+            model: "B".into(),
+            identity: Identity::from(&snapshot),
+            observed_at: 123,
+            state: CheckState::Pass,
+            reason_code: "model_verified".into(),
+            purpose: "diagnostic",
+            budget_enforcement: "not_enabled",
+            cost_status: "unknown",
+        });
+        for selected in [
+            None,
+            Some(("p".into(), "A".into())),
+            Some(("q".into(), "B".into())),
+        ] {
+            apply_selected_diagnostic(&mut snapshot, selected.as_ref());
+            assert_eq!(snapshot.checks[4].reason_code, "model_unverified");
+            assert_eq!(
+                snapshot.diagnostic.as_ref().unwrap().state,
+                CheckState::Pass
+            );
+        }
+        apply_selected_diagnostic(&mut snapshot, Some(&("p".into(), "B".into())));
+        assert_eq!(snapshot.checks[4].reason_code, "model_verified");
     }
     #[test]
     fn stopped_core_only_blocks_managed_egress() {

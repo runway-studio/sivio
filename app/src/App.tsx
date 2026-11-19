@@ -13,6 +13,7 @@ import { useViewScroll } from "@/hooks/useViewMemory";
 import type { Domain, NetworkTab } from "@/lib/navigation";
 import { useDesktopPreferences } from "@/lib/desktopPreferences";
 import { Overview } from "@/components/overview/Overview";
+import { refreshNodeSelection } from "@/components/network/nodeSelectionQueries";
 import { NetworkWorkspace } from "@/components/network/NetworkWorkspace";
 import {
   useCallback,
@@ -189,6 +190,7 @@ function App() {
   const { hasUpdate } = useUpdate();
 
   const [activeApp, setActiveApp] = useState<AppId>(getInitialApp);
+  const [modelPickerFromOverview, setModelPickerFromOverview] = useState(false);
   const sharedFeatureApp = sharedFeatureAppOf(activeApp);
   const {
     navigation,
@@ -196,6 +198,9 @@ function App() {
     setNetworkTab,
   } = useDomainNavigation();
   const currentView = navigation.view;
+  useEffect(() => {
+    if (currentView !== "modelPicker") setModelPickerFromOverview(false);
+  }, [currentView]);
   const networkNavigation = useRef<((tab: NetworkTab) => void) | null>(null);
   const desktopPreferences = useDesktopPreferences();
   const startupPageApplied = useRef(false);
@@ -758,7 +763,9 @@ function App() {
   useEffect(() => {
     const onInstall = (event: Event) => {
       if (navigationBusy()) {
-        toast.info(t("desktop.quitBusy", { defaultValue: "操作进行中，完成后可更新" }));
+        toast.info(
+          t("desktop.quitBusy", { defaultValue: "操作进行中，完成后可更新" }),
+        );
         return;
       }
       const proceed = (event as CustomEvent<() => void>).detail;
@@ -769,7 +776,8 @@ function App() {
       if (!confirmLeave(guarded)) guarded();
     };
     window.addEventListener("sivio-install-update-request", onInstall);
-    return () => window.removeEventListener("sivio-install-update-request", onInstall);
+    return () =>
+      window.removeEventListener("sivio-install-update-request", onInstall);
   });
 
   useTauriEvent("desktop-quit-requested", () => {
@@ -792,7 +800,11 @@ function App() {
         toast.success(
           t("desktop.actionDone", { defaultValue: "网络快捷操作已完成" }),
         );
-      void queryClient.invalidateQueries({ queryKey: ["network"] });
+      if (result.action === "network-node-selection") {
+        void refreshNodeSelection(queryClient);
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ["network"] });
+      }
     },
   );
 
@@ -1621,7 +1633,21 @@ function App() {
         return (
           <Overview
             onOpen={openPage}
+            onNetworkSettings={() =>
+              requestNetworkLeave(() => {
+                openPage("network");
+                setNetworkTab("设置");
+              })
+            }
             onApp={selectApp}
+            onModel={(app) =>
+              requestNetworkLeave(() => {
+                setModelPickerFromOverview(true);
+                setActiveApp(app);
+                localStorage.setItem(APP_STORAGE_KEY, app);
+                openPage("modelPicker");
+              })
+            }
             visibleApps={visibleApps}
             onSetup={() => requestNetworkLeave(() => setOnboardingOpen(true))}
           />
@@ -1654,6 +1680,8 @@ function App() {
         return (
           <ModelHubPage
             view={currentView}
+            preferActiveApp={modelPickerFromOverview}
+            onManageNetwork={() => openSettings("network")}
             commandSelection={
               commandTarget?.kind === "model" ? commandTarget : undefined
             }

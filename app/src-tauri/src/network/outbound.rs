@@ -64,6 +64,9 @@ pub(super) fn validate(mode: &str, custom: Option<&str>) -> anyhow::Result<()> {
     }
     Ok(())
 }
+pub(super) fn selection_epoch() -> u64 {
+    EGRESS.read().unwrap_or_else(|e| e.into_inner()).selection_epoch
+}
 pub(super) fn invalidate_selection() {
     let mut egress = EGRESS.write().unwrap_or_else(|e| e.into_inner());
     egress.selection_epoch = egress.selection_epoch.wrapping_add(1);

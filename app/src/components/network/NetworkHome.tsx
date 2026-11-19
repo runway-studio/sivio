@@ -1,7 +1,14 @@
 import type { AppId } from "@/lib/api";
 import { coreStatusLabel } from "@/lib/workspaceReadiness";
-import { WorkspaceReadiness } from "@/components/overview/WorkspaceReadiness";
-import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { WorkspaceReadinessDetails } from "@/components/overview/WorkspaceReadiness";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
@@ -24,10 +31,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { usePendingMutation } from "@/lib/unsavedChanges";
+import { hasPendingMutation, usePendingMutation } from "@/lib/unsavedChanges";
 import type { NetworkTab } from "@/lib/navigation";
 import type { NetworkSnapshot, Settings } from "./networkTypes";
-import type { ProxyInfo } from "./proxyNodes";
+import { NetworkQuickNode } from "./NetworkQuickNode";
+import { probeIdentity, useProbeInvalidation } from "./useProbeInvalidation";
+import { NetworkHealth } from "./NetworkHealth";
+import "@/components/overview/workspace.css";
 import { networkApi as api } from "./networkApi";
 import { NetworkRuntimeContext } from "./NetworkRuntime";
 import { NetworkTrafficPanel } from "./NetworkTrafficPanel";
@@ -91,9 +101,9 @@ function Card({
     <section
       className={`network-home-card min-w-0 ${wide ? "col-span-full" : ""}`}
     >
-      <div className="flex min-h-14 items-center justify-between gap-2 border-b px-4 py-2.5">
+      <div className="flex min-h-12 items-center justify-between gap-2 border-b px-4 py-2.5">
         <h2 className="flex min-w-0 items-center gap-2.5 text-sm font-semibold">
-          <span className="rounded-lg bg-primary/10 p-2 text-primary">
+          <span className="rounded-lg bg-primary/10 p-1.5 text-primary">
             <Icon size={17} />
           </span>
           {title}
@@ -150,17 +160,20 @@ function Connectivity({
   const [busy, setBusy] = useState(false);
   const epoch = useRef(0);
   const lock = useRef(false);
-  useEffect(() => {
+  const invalidate = useCallback(() => {
     epoch.current++;
     lock.current = false;
     setResults({});
     setBusy(false);
+  }, []);
+  useProbeInvalidation(invalidate);
+  useEffect(() => {
     return () => {
       epoch.current++;
     };
-  }, [generation, running]);
+  }, []);
   async function test(selected: typeof targets) {
-    if (lock.current || !running) return;
+    if (lock.current || !running || hasPendingMutation()) return;
     lock.current = true;
     setBusy(true);
     const request = epoch.current;
@@ -283,7 +296,6 @@ export function NetworkHome({
   const [customize, setCustomize] = useState(false);
   const [storageError, setStorageError] = useState(false);
   const [showIp, setShowIp] = useState(false);
-  const [group, setGroup] = useState("");
   const client = useQueryClient();
   const running = snapshot.runtime.phase === "running";
   const generation = snapshot.runtime.generation;
@@ -295,16 +307,25 @@ export function NetworkHome({
   const busyPhase = !["running", "stopped", "failed"].includes(
     snapshot.runtime.phase,
   );
+  const mutationLock = useRef(false);
   const mutation = useMutation({
     mutationFn: (work: () => Promise<unknown>) => work(),
-    onSettled: () => client.invalidateQueries({ queryKey: ["network"] }),
+    onSettled: async () => {
+      try {
+        await client.invalidateQueries({ queryKey: ["network"] });
+      } finally {
+        mutationLock.current = false;
+      }
+    },
   });
   usePendingMutation(mutation.isPending);
   const runtimeContext = useContext(NetworkRuntimeContext);
   const busy =
     mutation.isPending || busyPhase || !!runtimeContext?.lifecycle.isPending;
   const mutate = (work: () => Promise<unknown>) => {
-    if (!busy) mutation.mutate(work);
+    if (busy || mutationLock.current || hasPendingMutation()) return;
+    mutationLock.current = true;
+    mutation.mutate(work);
   };
   const save = (patch: Partial<Settings>) =>
     mutate(() =>
@@ -344,13 +365,6 @@ export function NetworkHome({
       path,
       expectedGeneration: generation,
     });
-  const proxies = useQuery({
-    queryKey: ["network", "home", "proxies", generation],
-    queryFn: () => control<{ proxies: Record<string, ProxyInfo> }>("/proxies"),
-    enabled: running && shown.includes("proxy"),
-    retry: false,
-    refetchInterval: running ? 10000 : false,
-  });
   const version = useQuery({
     queryKey: ["network", "home", "version", generation],
     queryFn: () => control<{ version: string }>("/version"),
@@ -396,19 +410,6 @@ export function NetworkHome({
     gcTime: 0,
     refetchOnWindowFocus: false,
   });
-  const proxyMap =
-    running && !proxies.isError ? (proxies.data?.proxies ?? {}) : {};
-  const groups = Object.entries(proxyMap).filter(
-    ([name, item]) =>
-      item.all?.length &&
-      (settings.mode === "global" ? name === "GLOBAL" : name !== "GLOBAL"),
-  );
-  const selectedGroup = groups.find(([name]) => name === group) ?? groups[0];
-  const node = selectedGroup?.[1].now;
-  const info = node ? proxyMap[node] : undefined;
-  const canSelect = ["Selector", "URLTest", "Fallback"].includes(
-    selectedGroup?.[1].type ?? "",
-  );
   const date = (seconds?: number) =>
     seconds && Number.isFinite(new Date(seconds * 1000).getTime())
       ? new Date(seconds * 1000).toLocaleString(i18n.language)
@@ -433,15 +434,11 @@ export function NetworkHome({
   }
   return (
     <div className="network-home space-y-5">
-      <WorkspaceReadiness
-        onManageProviders={onManageProviders}
-        onManageNetwork={() => onNavigate("设置")}
-      />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-medium">
+          <h2 className="text-2xl font-semibold tracking-tight">
             {tr("网络一览", "Network at a glance")}
-          </p>
+          </h2>
           <p className="mt-1 text-xs text-muted-foreground">
             {running
               ? tr(
@@ -449,8 +446,8 @@ export function NetworkHome({
                   "Network running · quick settings apply automatically",
                 )
               : tr(
-                  "网络已停止 · 可管理配置，启动后显示实时数据",
-                  "Network stopped · manage configuration; start to see live data",
+                  "可管理配置；运行状态与连接检测分别显示",
+                  "Manage configuration; runtime and connectivity are shown separately",
                 )}
           </p>
         </div>
@@ -464,6 +461,11 @@ export function NetworkHome({
           {tr("首页卡片", "Home cards")}
         </Button>
       </div>
+      <NetworkHealth
+        snapshot={snapshot}
+        onManage={() => onNavigate("节点")}
+        onSettings={() => onNavigate("设置")}
+      />
       {customize && (
         <fieldset className="flex flex-wrap gap-3 rounded-xl border bg-card p-4">
           <legend className="px-2 text-xs text-muted-foreground">
@@ -515,6 +517,11 @@ export function NetworkHome({
         </p>
       )}
       <div className="network-home-grid">
+        {shown.includes("proxy") && (
+          <Card title={titles.proxy} icon={Globe} action={link("节点")}>
+            <NetworkQuickNode snapshot={snapshot} disabled={busy} />
+          </Card>
+        )}
         {shown.includes("profile") && (
           <Card
             title={titles.profile}
@@ -545,19 +552,8 @@ export function NetworkHome({
                 </option>
               ))}
             </select>
-            {running && (
-              <p className="text-xs text-muted-foreground">
-                {tr(
-                  "切换或更新订阅时自动验证并应用，失败时恢复原配置。",
-                  "Switching or updating validates and applies the profile; failures restore the previous configuration.",
-                )}
-              </p>
-            )}
             {active ? (
               <>
-                <Field label={tr("更新时间", "Updated")}>
-                  {date(active.updated)}
-                </Field>
                 <Field label={tr("已用 / 总量", "Used / Total")}>
                   {bytes(usage.used)} / {bytes(usage.total)}
                 </Field>
@@ -581,9 +577,25 @@ export function NetworkHome({
                     />
                   </div>
                 )}
-                <Field label={tr("到期时间", "Expires")}>
-                  {date(usage.expire)}
-                </Field>
+                <details className="text-xs text-muted-foreground">
+                  <summary className="cursor-pointer">
+                    {tr("订阅详情", "Subscription details")}
+                  </summary>
+                  <div className="mt-3 space-y-2">
+                    <Field label={tr("更新时间", "Updated")}>
+                      {date(active.updated)}
+                    </Field>
+                    <Field label={tr("到期时间", "Expires")}>
+                      {date(usage.expire)}
+                    </Field>
+                    <p>
+                      {tr(
+                        "切换或更新订阅时自动验证并应用，失败时恢复原配置。",
+                        "Switching or updating validates and applies the profile; failures restore the previous configuration.",
+                      )}
+                    </p>
+                  </div>
+                </details>
                 {active.lastError && (
                   <p
                     role="alert"
@@ -619,86 +631,6 @@ export function NetworkHome({
             )}
           </Card>
         )}
-        {shown.includes("proxy") && (
-          <Card title={titles.proxy} icon={Globe} action={link("节点")}>
-            {settings.mode === "direct" ? (
-              <p className="text-sm">
-                {tr(
-                  "直连模式：流量不经过代理节点。",
-                  "Direct mode: traffic bypasses proxy nodes.",
-                )}
-              </p>
-            ) : (
-              <>
-                <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
-                  <p className="break-words font-medium">
-                    {node ?? tr("暂无节点", "No node available")}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {info?.type ?? "—"}
-                    {info?.udp ? " · UDP" : ""}
-                    {info?.history?.at(-1)?.delay
-                      ? ` · ${info.history.at(-1)!.delay} ms`
-                      : ""}
-                  </p>
-                </div>
-                <label className="block space-y-1.5 text-xs text-muted-foreground">
-                  <span>{tr("代理组", "Proxy group")}</span>
-                  <select
-                    className={selectClass}
-                    aria-label={tr("代理组", "Proxy group")}
-                    disabled={!running || !groups.length || busy}
-                    value={selectedGroup?.[0] ?? ""}
-                    onChange={(e) => setGroup(e.target.value)}
-                  >
-                    {!groups.length && <option value="">—</option>}
-                    {groups.map(([name]) => (
-                      <option key={name}>{name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block space-y-1.5 text-xs text-muted-foreground">
-                  <span>{tr("节点", "Node")}</span>
-                  <select
-                    className={selectClass}
-                    aria-label={tr("当前节点选择", "Current node selection")}
-                    disabled={!running || !canSelect || busy}
-                    value={node ?? ""}
-                    onChange={(e) => {
-                      const name = e.target.value;
-                      mutate(() =>
-                        api("controller", {
-                          method: "PUT",
-                          path: `/proxies/${encodeURIComponent(selectedGroup![0])}`,
-                          body: { name },
-                          expectedGeneration: generation,
-                        }),
-                      );
-                    }}
-                  >
-                    {!node && <option value="">—</option>}
-                    {selectedGroup?.[1].all?.map((name) => (
-                      <option key={name}>{name}</option>
-                    ))}
-                  </select>
-                </label>
-                {selectedGroup && !canSelect && (
-                  <p className="text-xs text-muted-foreground">
-                    {tr(
-                      "此分组由内核自动分配节点",
-                      "The core assigns nodes for this group automatically",
-                    )}
-                  </p>
-                )}
-              </>
-            )}
-            {proxies.isError && running && (
-              <p role="alert" className="text-xs text-destructive">
-                {proxies.error.message}
-              </p>
-            )}
-          </Card>
-        )}
         {shown.includes("network") && (
           <Card title={titles.network} icon={Shield} action={link("设置")}>
             {(["systemProxy", "tun"] as const).map((key) => (
@@ -719,9 +651,17 @@ export function NetworkHome({
                       ? (snapshot.runtime.tun ?? settings.tun)
                       : settings[key]) &&
                     (key !== "systemProxy" ||
-                      !snapshot.runtime.proxyGuardTripped)
+                      (!snapshot.runtime.proxyGuardTripped &&
+                        !snapshot.runtime.proxyGuardInspectionUnavailable &&
+                        !snapshot.runtime.proxyGuardWaitingForNetwork))
                   }
-                  disabled={busy || snapshot.runtime.phase === "failed"}
+                  disabled={
+                    busy ||
+                    snapshot.runtime.phase === "failed" ||
+                    (key === "systemProxy" &&
+                      (snapshot.runtime.proxyGuardInspectionUnavailable ||
+                        snapshot.runtime.proxyGuardWaitingForNetwork))
+                  }
                   onCheckedChange={(value) => toggleNetwork(key, value)}
                 />
               </div>
@@ -797,14 +737,45 @@ export function NetworkHome({
           <Card
             title={titles.traffic}
             icon={Activity}
-            wide
             action={link("流量", tr("详情", "Details"))}
           >
             <NetworkTrafficPanel running={running} generation={generation} />
           </Card>
         )}
+        {shown.includes("traffic") && (
+          <Card
+            title={tr("配置与运行信息", "Configuration and runtime")}
+            icon={Activity}
+          >
+            <Field label={tr("当前配置", "Current profile")}>
+              {active?.name ?? "—"}
+            </Field>
+            <Field label={tr("上次更新", "Last updated")}>
+              {date(active?.updated)}
+            </Field>
+            <Field label={tr("网络服务", "Network service")}>
+              {coreStatusLabel(
+                snapshot.runtime.phase,
+                i18n.language.startsWith("zh"),
+              )}
+            </Field>
+            {active?.lastError && (
+              <p className="break-words text-xs text-destructive">
+                {tr("上次订阅更新失败", "Last subscription update failed")} ·{" "}
+                {active.lastError}
+              </p>
+            )}
+            {snapshot.runtime.error && (
+              <p className="break-words text-xs text-destructive">
+                {snapshot.runtime.error}
+              </p>
+            )}
+            {link("日志", tr("查看日志", "View logs"))}
+          </Card>
+        )}
         {shown.includes("tests") && (
           <Connectivity
+            key={probeIdentity(snapshot)}
             running={running}
             generation={generation}
             tests={settings.customTests}
@@ -969,6 +940,10 @@ export function NetworkHome({
           </Card>
         )}
       </div>
+      <WorkspaceReadinessDetails
+        onManageProviders={onManageProviders}
+        onManageNetwork={() => onNavigate("设置")}
+      />
     </div>
   );
 }

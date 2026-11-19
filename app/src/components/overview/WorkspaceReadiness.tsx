@@ -1,31 +1,61 @@
 import { ClientDiagnostic } from "./ClientDiagnostic";
+import { useIsMutating } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { APP_IDS, getAppLabel } from "@/config/appConfig";
 import type { AppId } from "@/lib/api/types";
-import { useWorkspaceReadiness } from "@/lib/query/workspaceReadiness";
+import {
+  diagnosticStartKey,
+  useWorkspaceReadiness,
+} from "@/lib/query/workspaceReadiness";
 import {
   readinessReasonLabel,
   type ReadinessCheckId,
 } from "@/lib/workspaceReadiness";
 import { Button } from "@/components/ui/button";
 
-/** Both pages render the same passive observations, with no automatic probe. */
+type ReadinessProps = {
+  fixedApp?: AppId;
+  onManageProviders?: (app: AppId) => void;
+  onManageNetwork?: () => void;
+};
+
+export function WorkspaceReadinessDetails(props: ReadinessProps) {
+  const { i18n } = useTranslation();
+  const [expanded, setExpanded] = useState<boolean>();
+  return (
+    <details
+      className="rounded-xl border"
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+        {i18n.language.startsWith("zh")
+          ? "客户端诊断与详细状态"
+          : "Client diagnostics and detailed status"}
+      </summary>
+      {expanded !== undefined && (
+        <div className="px-4 pb-4">
+          <WorkspaceReadiness {...props} visible={expanded} />
+        </div>
+      )}
+    </details>
+  );
+}
+
 export function WorkspaceReadiness({
   onManageProviders,
   onManageNetwork,
   fixedApp,
-}: {
-  fixedApp?: AppId;
-  onManageProviders?: (app: AppId) => void;
-  onManageNetwork?: () => void;
-}) {
+  visible = true,
+}: ReadinessProps & { visible?: boolean }) {
   const { i18n } = useTranslation();
   const zh = i18n.language.startsWith("zh");
   const tr = (cn: string, en: string) => (zh ? cn : en);
   const [selectedApp, setApp] = useState<AppId>("claude");
   const app = fixedApp ?? selectedApp;
-  const query = useWorkspaceReadiness(app);
+  // A collapse can arrive between submitting a diagnostic and reading its pending state.
+  const starting = useIsMutating({ mutationKey: diagnosticStartKey(app) }) > 0;
+  const query = useWorkspaceReadiness(app, visible || starting);
   const id = useId();
   const labels: Record<ReadinessCheckId, string> = {
     configuration: tr("已保存配置", "Saved configuration"),
@@ -95,7 +125,12 @@ export function WorkspaceReadiness({
         </dl>
       )}
       {!query.isError && query.data?.checks && (
-        <ClientDiagnostic key={app} app={app} snapshot={query.data} />
+        <ClientDiagnostic
+          key={app}
+          app={app}
+          snapshot={query.data}
+          visible={visible}
+        />
       )}
       {(onManageProviders || onManageNetwork) && (
         <div className="mt-3 flex flex-wrap gap-2">

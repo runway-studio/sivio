@@ -1,272 +1,382 @@
-import { coreStatusLabel } from "@/lib/workspaceReadiness";
-import { WorkspaceReadiness } from "./WorkspaceReadiness";
-import type { VisibleApps } from "@/types";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useWorkspacePreferences } from "@/lib/desktopPreferences";
-import { useQueries, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Box, Check, Globe, Layers, Server } from "lucide-react";
-import { AppGlyph } from "@/components/shell/AppGlyph";
-import logo from "@/assets/icons/logo.svg";
+import { useQuery } from "@tanstack/react-query";
 import {
-  APP_IDS,
-  getAppLabel,
-  visibleClientIds,
-  clientCapabilityLabel,
-} from "@/config/appConfig";
-import { providersQueryOptions } from "@/lib/query";
-import { useUsageSummary } from "@/lib/query/usage";
-import { useProxyStatusQuery } from "@/lib/query/proxy";
+  Activity,
+  ArrowRight,
+  Globe,
+  History,
+  LayoutGrid,
+  Plug,
+} from "lucide-react";
+import type { VisibleApps } from "@/types";
 import type { AppId } from "@/lib/api";
 import type { GlobalPage } from "@/lib/navigation";
-import { Button } from "@/components/ui/button";
 import {
-  networkApi,
-  type NetworkSnapshot,
-} from "@/components/network/NetworkWorkspace";
+  getAppLabel,
+  isProxyAppId,
+  visibleClientIds,
+} from "@/config/appConfig";
+import { useWorkspacePreferences } from "@/lib/desktopPreferences";
+import { providersQueryOptions } from "@/lib/query";
+import { useUsageSummary } from "@/lib/query/usage";
+import { modelHubApi } from "@/lib/api/model-hub";
+import { AppGlyph } from "@/components/shell/AppGlyph";
+import { AppPageHeader } from "@/components/shell/AppPageHeader";
+import { Button } from "@/components/ui/button";
+import { NetworkHealth } from "@/components/network/NetworkHealth";
+import { NetworkQuickNode } from "@/components/network/NetworkQuickNode";
+import { networkApi } from "@/components/network/networkApi";
+import type { NetworkSnapshot } from "@/components/network/networkTypes";
+import { WorkspaceCard } from "./WorkspaceCard";
+import { WorkspaceStats } from "./WorkspaceStats";
+import { WorkspaceReadinessDetails } from "./WorkspaceReadiness";
+import { ClientReadinessSummary } from "./ClientReadinessSummary";
+import "./workspace.css";
+
+function ClientRow({
+  app,
+  onApp,
+  onModel,
+}: {
+  app: AppId;
+  onApp: (app: AppId) => void;
+  onModel?: (app: AppId) => void;
+}) {
+  const { i18n } = useTranslation();
+  const tr = (cn: string, en: string) =>
+    i18n.language.startsWith("zh") ? cn : en;
+  const providers = useQuery(providersQueryOptions(app));
+  const catalog = useQuery({
+    queryKey: ["model-picker", app],
+    queryFn: () => {
+      if (!isProxyAppId(app)) throw new Error("Unsupported client");
+      return modelHubApi.catalog(app);
+    },
+    enabled: isProxyAppId(app),
+    retry: false,
+  });
+  const unavailable =
+    providers.isError ||
+    providers.data?.readError ||
+    (isProxyAppId(app) && catalog.isError);
+  const current = providers.data?.providers[providers.data.currentProviderId];
+  const provider =
+    catalog.data?.providers.find((item) => item.id === catalog.data.providerId)
+      ?.name ?? current?.name;
+  return (
+    <div className="workspace-client">
+      <div className="flex min-w-0 items-center gap-3">
+        <AppGlyph app={app} size={30} />
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{getAppLabel(app)}</p>
+          <p className="mt-1 break-words text-xs text-muted-foreground">
+            {unavailable
+              ? tr("配置暂不可用", "Configuration unavailable")
+              : provider
+                ? `${provider}${catalog.data?.model ? ` · ${catalog.data.model}` : ""}`
+                : providers.isLoading
+                  ? tr("正在读取配置…", "Loading configuration…")
+                  : tr("尚未选择供应商", "No provider selected")}
+          </p>
+        </div>
+      </div>
+      <div className="workspace-client-state">
+        <ClientReadinessSummary app={app} />
+      </div>
+      <Button
+        className="workspace-client-action"
+        variant="outline"
+        size="sm"
+        onClick={() =>
+          isProxyAppId(app) && onModel ? onModel(app) : onApp(app)
+        }
+      >
+        {isProxyAppId(app) && onModel
+          ? tr("切换模型", "Switch model")
+          : tr("管理连接", "Manage connection")}
+      </Button>
+    </div>
+  );
+}
+
 export function Overview({
   onOpen,
   onApp,
+  onModel,
   visibleApps,
   onSetup,
+  onNetworkSettings,
 }: {
   onSetup?: () => void;
+  onNetworkSettings?: () => void;
+  onModel?: (app: AppId) => void;
   onOpen: (page: GlobalPage) => void;
   onApp: (app: AppId) => void;
   visibleApps?: Partial<VisibleApps>;
 }) {
-  const { t, i18n } = useTranslation();
-  const preferences = useWorkspacePreferences();
+  const { i18n } = useTranslation();
   const tr = (cn: string, en: string) =>
     i18n.language.startsWith("zh") ? cn : en;
+  const preferences = useWorkspacePreferences();
   const usage = useUsageSummary({ preset: "today" });
-  const proxy = useProxyStatusQuery();
   const network = useQuery({
     queryKey: ["network", "snapshot"],
     queryFn: () => networkApi<NetworkSnapshot>("snapshot"),
-    refetchInterval: 5000,
-  });
-  const providers = useQueries({
-    queries: APP_IDS.map((app) => providersQueryOptions(app)),
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) => (query.state.status === "error" ? false : 5000),
   });
   const visibleClients = visibleClientIds(visibleApps);
-  const totalProviders = providers.reduce(
-    (sum, item) => sum + Object.keys(item.data?.providers ?? {}).length,
-    0,
+  const [showAllClients, setShowAllClients] = useState(false);
+  const clientsOnPage = showAllClients
+    ? visibleClients
+    : visibleClients.slice(0, 4);
+  const snapshot = network.isError ? undefined : network.data;
+  const running = snapshot?.runtime.phase === "running";
+  const settings = snapshot?.catalog.settings;
+  const profile = snapshot?.catalog.profiles.find(
+    (item) => item.id === snapshot.catalog.active,
   );
-  const providersUnavailable = providers.some(
-    (item) => item.isError || item.data?.readError,
+  const link = (label: string, page: GlobalPage) => (
+    <Button variant="ghost" size="sm" onClick={() => onOpen(page)}>
+      {label}
+      <ArrowRight size={13} className="ml-1" />
+    </Button>
   );
-  const providersPending = providers.some((item) => !item.data);
-  const running = network.data?.runtime.phase === "running";
   return (
-    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-7 pb-10 pt-6">
-      <header className="mb-7 flex items-start justify-between gap-6">
-        <div className="min-w-0">
-          <p className="mb-1 text-xs text-muted-foreground">
-            {tr("你的 AI 工作台", "Your AI workspace")}
-          </p>
-          <h1 className="text-3xl font-semibold tracking-tight">
-            {t("app.title")}
-          </h1>
-          <p className="mt-1 text-lg font-medium text-primary">
-            {t("app.description")}
-          </p>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            {tr(
-              "在 Sivio 统一管理模型配置、工具扩展与网络连接，让 AI 工作更顺手。",
-              "Manage model configurations, tool extensions and network connections in Sivio to keep your AI workflow within reach.",
-            )}
-          </p>
-        </div>
-        <div className="shrink-0 rounded-2xl bg-primary/10 p-3">
-          <img
-            src={logo}
-            alt={t("app.title")}
-            draggable={false}
-            className="h-12 w-12"
-          />
-        </div>
-      </header>
-      <div className="mb-7 grid grid-cols-2 gap-4 xl:grid-cols-4">
-        {[
-          {
-            id: "usage" as const,
-            label: tr("今日 Token 用量", "Tokens today"),
-            value:
-              !usage.isError && usage.data
-                ? usage.data.realTotalTokens.toLocaleString()
-                : "—",
-            note: usage.isError
-              ? tr("统计暂不可用", "Statistics unavailable")
-              : usage.data
-                ? `${usage.data.totalRequests.toLocaleString()} ${tr("次请求", "requests")}`
-                : tr("等待本地统计", "Waiting for local statistics"),
-            icon: Layers,
-          },
-          {
-            id: "router" as const,
-            label: tr("AI 路由服务", "AI router"),
-            value: proxy.isError
-              ? tr("状态不可用", "Status unavailable")
-              : proxy.data
-                ? proxy.data.running
-                  ? tr("运行中", "Running")
-                  : tr("已停止", "Stopped")
-                : "—",
-            note:
-              !proxy.isError && proxy.data?.running
-                ? `127.0.0.1:${proxy.data.port}`
-                : tr(
-                    "在工具页选择路由模式",
-                    "Select routing mode on an app page",
-                  ),
-            icon: Server,
-          },
-          {
-            id: "network" as const,
-            label: tr("网络内核", "Network core"),
-            value: coreStatusLabel(
-              network.data?.runtime.phase,
-              i18n.language.startsWith("zh"),
-              network.isError,
-            ),
-            note:
-              !network.isError && running
-                ? `${network.data?.runtime.managed ? tr("受管", "Managed") : tr("普通", "Ordinary")} Mihomo · :${network.data?.runtime.port}`
-                : tr(
-                    "选择配置后启动网络",
-                    "Select a profile, then start the network",
-                  ),
-            icon: Globe,
-          },
-          {
-            id: "providers" as const,
-            label: tr("供应商配置", "Provider configurations"),
-            value:
-              providersUnavailable || providersPending
-                ? "—"
-                : String(totalProviders),
-            note: providersUnavailable
-              ? tr("配置暂不可用", "Configuration unavailable")
-              : `${APP_IDS.length} ${tr("种 AI 客户端", "AI clients")}`,
-            icon: Box,
-          },
-        ]
-          .filter((card) => preferences.homeCards.includes(card.id))
-          .map((card) => (
-            <article key={card.label} className="rounded-2xl bg-muted p-5">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>{card.label}</span>
-                <card.icon size={15} />
-              </div>
-              <p className="my-3 text-2xl font-semibold tracking-tight">
-                {card.value}
+    <>
+      <AppPageHeader
+        title={tr("工作台", "Workspace")}
+        icon={<LayoutGrid className="h-5 w-5" />}
+      />
+      <div className="workspace-page min-h-0 min-w-0 flex-1 overflow-y-auto p-6">
+        <div className="mx-auto max-w-6xl space-y-5">
+          <header className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {tr("你的工作台", "Your workspace")}
+              </h1>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {tr(
+                  "当前连接、常用工具，都在这里。",
+                  "Your connections and everyday tools, together.",
+                )}
               </p>
-              <p className="text-xs text-muted-foreground">{card.note}</p>
-            </article>
-          ))}
-      </div>
-      <section className="mb-7 rounded-2xl border p-5">
-        <div className="flex justify-between">
-          <div>
-            <h2 className="font-medium">
-              {tr("网络工作区", "Network workspace")}
-            </h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {network.isError
-                ? tr("网络状态不可用", "Network state unavailable")
-                : network.data
-                  ? `${network.data.catalog.profiles.length} ${tr("份配置 · AI 出站", "profiles · AI outbound")} ${network.data.catalog.outbound}`
-                  : tr("正在读取网络状态…", "Reading network state…")}
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => onOpen("network")}>
-            {tr("管理网络", "Manage network")}
-            <ArrowRight size={14} />
-          </Button>
-        </div>
-        <div className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
-          {[
-            tr("订阅与节点", "Profiles and proxies"),
-            tr("规则、连接与日志", "Rules, connections and logs"),
-            tr("TUN 与系统代理恢复", "TUN and system proxy recovery"),
-          ].map((label) => (
-            <div
-              key={label}
-              className="flex items-center gap-2 rounded-lg bg-muted px-3 py-3"
-            >
-              <Check size={14} className="text-primary" />
-              {label}
             </div>
-          ))}
-        </div>
-      </section>
-      <div className="mb-7">
-        <WorkspaceReadiness
-          onManageProviders={onApp}
-          onManageNetwork={() => onOpen("network")}
-        />
-      </div>
-      <section>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-medium">{tr("AI 工具", "AI tools")}</h2>
-          <div className="flex flex-wrap items-center justify-end gap-1">
             {onSetup && (
-              <Button variant="ghost" size="sm" onClick={onSetup}>
+              <Button variant="outline" size="sm" onClick={onSetup}>
                 {tr("接入引导", "Client setup")}
-                <ArrowRight size={14} />
               </Button>
             )}
-            <Button variant="ghost" size="sm" onClick={() => onOpen("apps")}>
-              {tr("安装与管理", "Install and manage")}
-            </Button>
-          </div>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {visibleClients.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              {tr(
-                "尚未选择常用工具，请通过安装与管理添加。",
-                "Choose your tools in Install and manage.",
+          </header>
+          {snapshot ? (
+            <NetworkHealth
+              snapshot={snapshot}
+              onManage={() => onOpen("network")}
+              onSettings={onNetworkSettings}
+            />
+          ) : (
+            <section className="workspace-health">
+              <p role="status" className="flex-1 text-sm">
+                {network.isError
+                  ? tr("网络状态暂不可用", "Network status unavailable")
+                  : tr("正在读取网络状态…", "Reading network state…")}
+              </p>
+              {network.isError && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={network.isFetching}
+                  onClick={() => void network.refetch()}
+                >
+                  {tr("重试读取", "Retry")}
+                </Button>
               )}
-            </p>
+            </section>
           )}
-          {visibleClients.map((app) => {
-            const query = providers[APP_IDS.indexOf(app)];
-            const count = Object.keys(query.data?.providers ?? {}).length;
-            return (
-              <button
-                key={app}
-                className="group flex items-center gap-3 rounded-xl border p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
-                onClick={() => onApp(app)}
-              >
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted text-sm font-semibold text-primary">
-                  <AppGlyph app={app} size={25} badgeClassName="bg-muted" />
-                </span>
-                <span className="flex-1">
-                  <span className="block text-sm font-medium">
-                    {getAppLabel(app)}
-                  </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {query.isError || query.data?.readError
-                      ? tr("配置不可用", "Configuration unavailable")
-                      : !query.data
-                        ? tr("正在读取配置…", "Reading configuration…")
-                        : `${count} ${tr("个供应商配置", "provider configurations")}`}
-                  </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {clientCapabilityLabel(app, i18n.language.startsWith("zh"))}
-                  </span>
-                </span>
-                <ArrowRight
-                  size={14}
-                  className="text-muted-foreground group-hover:text-primary"
+          <div className="workspace-grid">
+            <WorkspaceCard
+              title={tr("当前网络", "Current network")}
+              icon={Globe}
+              action={link(tr("管理网络", "Manage network"), "network")}
+            >
+              {snapshot ? (
+                <NetworkQuickNode snapshot={snapshot} />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {tr("等待网络状态", "Waiting for network state")}
+                </p>
+              )}
+            </WorkspaceCard>
+            <WorkspaceCard
+              title={tr("连接方式", "Connection settings")}
+              icon={Plug}
+            >
+              <dl className="space-y-4 text-sm">
+                {[
+                  [
+                    tr("系统代理", "System proxy"),
+                    !snapshot
+                      ? "—"
+                      : !running
+                        ? tr("未生效", "Inactive")
+                        : snapshot.runtime.proxyGuardTripped
+                          ? tr(
+                              "未接管 / 已被外部修改",
+                              "Not owned / changed externally",
+                            )
+                          : snapshot.runtime.proxyGuardInspectionUnavailable
+                            ? tr("暂时无法核对", "Status unavailable")
+                            : snapshot.runtime.proxyGuardWaitingForNetwork
+                              ? tr("等待网络确认", "Waiting for network")
+                              : settings?.systemProxy
+                                ? tr("由 Sivio 管理", "Managed by Sivio")
+                                : tr("未开启", "Off"),
+                  ],
+                  [
+                    tr("代理模式", "Proxy mode"),
+                    settings
+                      ? ({
+                          rule: tr("规则分流", "Rule routing"),
+                          global: tr("全局代理", "Global proxy"),
+                          direct: tr("直连", "Direct"),
+                        }[settings.mode] ?? settings.mode)
+                      : "—",
+                  ],
+                  [
+                    tr("虚拟网卡 · TUN", "Virtual adapter · TUN"),
+                    !snapshot
+                      ? "—"
+                      : running && (snapshot.runtime.tun ?? settings?.tun)
+                        ? tr("已开启", "On")
+                        : tr("未开启", "Off"),
+                  ],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex justify-between gap-4">
+                    <dt className="text-muted-foreground">{label}</dt>
+                    <dd className="text-right">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">
+                {tr(
+                  "系统代理、TUN 与 AI 工具出站分别生效。",
+                  "System proxy, TUN and AI outbound settings apply separately.",
+                )}
+              </p>
+            </WorkspaceCard>
+          </div>
+          <section>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">
+                {tr("常用 AI 工具", "Everyday AI tools")}
+              </h2>
+              {link(tr("安装与管理", "Install and manage"), "apps")}
+            </div>
+            <div className="workspace-card">
+              {!visibleClients.length && (
+                <p className="p-4 text-sm text-muted-foreground">
+                  {tr(
+                    "尚未选择常用工具，请通过安装与管理添加。",
+                    "Choose your tools in Install and manage.",
+                  )}
+                </p>
+              )}
+              {clientsOnPage.map((app) => (
+                <ClientRow
+                  key={app}
+                  app={app}
+                  onApp={onApp}
+                  onModel={onModel}
                 />
-              </button>
-            );
-          })}
+              ))}
+            </div>
+            {visibleClients.length > 4 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2"
+                onClick={() => setShowAllClients(!showAllClients)}
+              >
+                {showAllClients
+                  ? tr("收起工具列表", "Show fewer tools")
+                  : tr(
+                      `展开其余 ${visibleClients.length - 4} 个工具`,
+                      `Show ${visibleClients.length - 4} more tools`,
+                    )}
+              </Button>
+            )}
+          </section>
+          <div className="workspace-grid">
+            <WorkspaceCard
+              title={tr("配置与运行信息", "Configuration and runtime")}
+              icon={History}
+              action={link(tr("查看网络", "View network"), "network")}
+            >
+              <p className="text-sm">
+                {profile?.name ??
+                  tr("尚未选择网络配置", "No network profile selected")}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {profile?.updated
+                  ? `${tr("上次更新", "Last updated")} · ${new Date(profile.updated * 1000).toLocaleString(i18n.language)}`
+                  : tr("暂无更新时间", "No update recorded")}
+              </p>
+              {profile?.lastError && (
+                <p className="mt-3 break-words text-xs text-destructive">
+                  {tr("上次订阅更新失败", "Last subscription update failed")} ·{" "}
+                  {profile.lastError}
+                </p>
+              )}
+              {snapshot?.runtime.error && (
+                <p className="mt-3 break-words text-xs text-destructive">
+                  {snapshot.runtime.error}
+                </p>
+              )}
+            </WorkspaceCard>
+            {preferences.homeCards.includes("usage") && (
+              <WorkspaceCard
+                title={tr("今日用量", "Usage today")}
+                icon={Activity}
+                action={link(tr("查看统计", "View usage"), "usage")}
+              >
+                <div className="flex flex-wrap gap-8">
+                  {[
+                    [
+                      tr("已观测请求", "Observed requests"),
+                      usage.data?.totalRequests,
+                    ],
+                    [tr("Token 用量", "Tokens"), usage.data?.realTotalTokens],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                      <p className="mt-1 text-xl font-semibold">
+                        {usage.isError || value === undefined
+                          ? "—"
+                          : Number(value).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {usage.isError
+                    ? tr("统计暂不可用", "Statistics unavailable")
+                    : tr(
+                        "仅统计本地可观测的请求。",
+                        "Only locally observed requests are included.",
+                      )}
+                </p>
+              </WorkspaceCard>
+            )}
+          </div>
+          <WorkspaceReadinessDetails
+            onManageProviders={onApp}
+            onManageNetwork={() => onOpen("network")}
+          />
+          <WorkspaceStats snapshot={snapshot} onOpen={onOpen} />
         </div>
-      </section>
-    </div>
+      </div>
+    </>
   );
 }

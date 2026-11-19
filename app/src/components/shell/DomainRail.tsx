@@ -22,16 +22,16 @@ export function DomainRail({
   return (
     <nav
       aria-label={zh ? "一级导航" : "Primary navigation"}
-      className="sivio-domain-rail z-10 flex h-full w-16 shrink-0 flex-col items-center px-2"
+      className="sivio-domain-rail z-10 flex h-full w-12 shrink-0 flex-col items-center px-1"
     >
       <img
         src={logo}
         alt="Sivio"
         title="Sivio — Your Shortcut to AI"
         draggable={false}
-        className="mb-6 mt-4 h-8 w-8"
+        className="mb-4 mt-3 h-7 w-7"
       />
-      <div className="flex w-full flex-col gap-2">
+      <div className="flex w-full flex-col gap-1">
         {items.map(({ id, label, Icon }) => (
           <HoverTip key={id} content={label} side="right">
             <button
@@ -40,7 +40,7 @@ export function DomainRail({
               aria-current={domain === id ? "page" : undefined}
               onClick={() => onSelect(id)}
               className={cn(
-                "relative flex h-12 w-full items-center justify-center rounded-xl border border-transparent text-fg-2 transition-colors hover:bg-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary",
+                "relative flex h-10 w-full items-center justify-center rounded-lg border border-transparent text-fg-2 transition-colors hover:bg-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary",
                 domain === id &&
                   "border-primary/20 bg-selected font-medium text-primary hover:bg-selected",
               )}

@@ -174,7 +174,7 @@ pub(crate) fn handle(app: &tauri::AppHandle, event: &str) -> bool {
         let result=async {
             let parts=event.split(':').collect::<Vec<_>>();
             let state=app.try_state::<NetworkState>().context("Network workspace is not ready")?;
-            match parts.as_slice(){
+            let value = match parts.as_slice(){
                 ["start"]=>execute(&app,&state,"start",json!({})).await?,
                 ["stop"]=>execute(&app,&state,"stop",json!({})).await?,
                 ["action",action]=>shortcut(&app,action).await?,
@@ -191,16 +191,17 @@ pub(crate) fn handle(app: &tauri::AppHandle, event: &str) -> bool {
                 },
                 _=>bail!("Unknown network menu action"),
             };
-            Ok::<_,anyhow::Error>(())
+            Ok::<_,anyhow::Error>(value)
         }.await;
         BUSY.store(false, Ordering::Release);
         crate::desktop_preferences::notify_result(
             &app,
-            "network-menu",
-            result.err().map(|_| {
-                "Network menu action failed; reopen the menu or review the network workspace"
-                    .to_owned()
-            }),
+            if event.starts_with("node:") { "network-node-selection" } else { "network-menu" },
+            match result {
+                Ok(value) if value["connectionCleanup"] == "failed" => Some("Node switched, but closing existing connections failed. Retry in Connections.".into()),
+                Ok(_) => None,
+                Err(_) => Some("Network menu action failed; reopen the menu or review the network workspace".into()),
+            },
         );
         let _ = app.emit("network-state-changed", ());
     });

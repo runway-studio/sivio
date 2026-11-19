@@ -5,7 +5,7 @@ import { ImportExportSection } from "@/components/settings/ImportExportSection";
 const tMock = vi.fn((key: string) => key);
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: tMock }),
+  useTranslation: () => ({ t: tMock, i18n: { language: "zh" } }),
 }));
 
 describe("ImportExportSection Component", () => {

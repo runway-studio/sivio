@@ -2,6 +2,21 @@
 use super::*;
 use tokio::sync::watch;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum RecoveryProgress {
+    #[default]
+    Idle,
+    Retrying,
+    WaitingForNetwork,
+}
+
+fn retry_progress(attempts: u32, waiting_for_network: bool) -> RecoveryProgress {
+    if attempts >= 3 { RecoveryProgress::Idle }
+    else if waiting_for_network { RecoveryProgress::WaitingForNetwork }
+    else { RecoveryProgress::Retrying }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub(super) enum RenewalError {
     #[error("owner session is stale or invalid")]
@@ -83,12 +98,19 @@ pub(super) async fn reconnect(app: &tauri::AppHandle, state: &NetworkState, mut 
         let mut runtime = state.runtime.lock().await;
         if runtime.generation != generation || runtime.phase != "failed" || runtime.recovery_required
             || crate::update_install::installing() {
+            if runtime.generation == generation {
+                runtime.recovery_progress = RecoveryProgress::Idle;
+            }
             return;
         }
+        runtime.recovery_progress = RecoveryProgress::Retrying;
         let (expired, profile, tun, tripped) = if let Some(previous) = &previous {
             previous
         } else {
-            let (Some(session), Some(profile)) = (&runtime.session, &runtime.active) else { return };
+            let (Some(session), Some(profile)) = (&runtime.session, &runtime.active) else {
+                runtime.recovery_progress = RecoveryProgress::Idle;
+                return;
+            };
             let connection = (session.generation, profile.clone(), runtime.tun, runtime.proxy_guard.tripped);
             // A rejected proof will never renew. Do not schedule another recovery
             // loop on the next health tick if these bounded attempts fail.
@@ -138,7 +160,8 @@ pub(super) async fn reconnect(app: &tauri::AppHandle, state: &NetworkState, mut 
         if let Err(error) = &result {
             // A Mac may wake away from Wi-Fi. Wait for a primary service without
             // spending the core restart budget while no start is possible.
-            if matches!(error.downcast_ref::<sysproxy::Error>(), Some(sysproxy::Error::NoActiveNetworkService)) {
+            let waiting = matches!(error.downcast_ref::<sysproxy::Error>(), Some(sysproxy::Error::NoActiveNetworkService));
+            if waiting {
                 delay = 15;
             } else {
                 attempts += 1;
@@ -147,6 +170,7 @@ pub(super) async fn reconnect(app: &tauri::AppHandle, state: &NetworkState, mut 
             let mut runtime = state.runtime.lock().await;
             generation = runtime.generation;
             runtime.phase = "failed".into();
+            runtime.recovery_progress = retry_progress(attempts, waiting);
             runtime.error = Some(format!("网络自动重连失败：{error}"));
         }
         let _ = app.emit("network-runtime-changed", ());
@@ -157,6 +181,14 @@ pub(super) async fn reconnect(app: &tauri::AppHandle, state: &NetworkState, mut 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn progress_distinguishes_waiting_and_exhausted_retries() {
+        assert_eq!(retry_progress(0, false), RecoveryProgress::Retrying);
+        assert_eq!(retry_progress(2, true), RecoveryProgress::WaitingForNetwork);
+        assert_eq!(retry_progress(3, false), RecoveryProgress::Idle);
+        assert_eq!(retry_progress(3, true), RecoveryProgress::Idle);
+    }
 
     #[tokio::test]
     async fn renews_while_runtime_is_locked_and_stops_with_session() {

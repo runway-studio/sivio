@@ -15,7 +15,11 @@ export function ModelHubPage({
   onManageProviders,
   onVerify,
   commandSelection,
+  onManageNetwork,
+  preferActiveApp = false,
 }: {
+  preferActiveApp?: boolean;
+  onManageNetwork?: () => void;
   onVerify?: (app: ProxyAppId) => void;
   commandSelection?: { app: AppId; providerId: string; model: string };
   view: "modelPicker" | "routeDecisions";
@@ -55,11 +59,14 @@ export function ModelHubPage({
                   ? `${commandSelection.app}:${commandSelection.providerId}:${commandSelection.model}`
                   : app
               }
-              initialApp={commandSelection ? app : pickerClient}
+              initialApp={
+                commandSelection || preferActiveApp ? app : pickerClient
+              }
               initialSelection={commandSelection}
               onClientChange={setPickerClient}
               onManageProviders={onManageProviders}
               onVerify={onVerify}
+              onManageNetwork={onManageNetwork}
               page
               setBusy={onBusyChange}
             />

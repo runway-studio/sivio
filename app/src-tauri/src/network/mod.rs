@@ -224,6 +224,7 @@ struct Runtime {
     last_delay: i64,
     configured_port: u16,
     recovery_required: bool,
+    recovery_progress: lease::RecoveryProgress,
     proxy_guard: proxy_guard::Guard,
 }
 impl Default for Runtime {
@@ -246,6 +247,7 @@ impl Default for Runtime {
             last_delay: 0,
             configured_port: 0,
             recovery_required: false,
+            recovery_progress: Default::default(),
             proxy_guard: Default::default(),
         }
     }
@@ -936,6 +938,7 @@ async fn control_at(runtime: &ControlTarget, method: &str, path: &str, body: Opt
     }
 }
 async fn stop_inner(runtime: &mut Runtime) -> Result<()> {
+    runtime.recovery_progress = lease::RecoveryProgress::Idle;
     if let Err(error) = stop_resources(runtime).await {
         runtime.phase = "failed".into();
         runtime.recovery_required = true;
@@ -1149,6 +1152,7 @@ async fn start_with_proxy_policy(app: &tauri::AppHandle, state: &NetworkState, c
     runtime.generation += 1;
     runtime.phase = "starting".into();
     runtime.recovery_required = false;
+    runtime.recovery_progress = lease::RecoveryProgress::Idle;
     runtime.error = None;
     // Record ownership before allocating listeners/processes, so any partial
     // launch is cleaned against this run's paths rather than the previous run.
@@ -1335,6 +1339,7 @@ fn schedule_selection_restore(state: NetworkState, id: String, generation: u64) 
                         "saved node is not available yet"
                     );
                     control(&runtime, "PUT", &path, Some(json!({"name":node}))).await?;
+                    outbound::invalidate_selection();
                     Ok(())
                 }
                 .await;
@@ -1491,7 +1496,7 @@ async fn install(app: &tauri::AppHandle) -> Result<Value> {
     Ok(json!({"installed":true}))
 }
 fn snapshot(runtime: &Runtime) -> Value {
-    json!({"phase":runtime.phase,"generation":runtime.generation,"error":runtime.error,"managed":runtime.managed,"tun":runtime.tun,"proxyGuardTripped":runtime.proxy_guard.tripped,"port":runtime.port,"active":runtime.active,"tunVerification":"pending","intelAcceptance":"not-passed","media":runtime.media.as_ref().map(|job|job.snapshot())})
+    json!({"phase":runtime.phase,"generation":runtime.generation,"selectionEpoch":outbound::selection_epoch(),"error":runtime.error,"managed":runtime.managed,"tun":runtime.tun,"proxyGuardTripped":runtime.proxy_guard.tripped,"proxyGuardWaitingForNetwork":runtime.proxy_guard.inspection == proxy_guard::Inspection::NoNetwork,"proxyGuardInspectionUnavailable":runtime.proxy_guard.inspection == proxy_guard::Inspection::Unavailable,"recoveryRequired":runtime.recovery_required,"recoveryStatus":runtime.recovery_progress,"port":runtime.port,"active":runtime.active,"tunVerification":"pending","intelAcceptance":"not-passed","media":runtime.media.as_ref().map(|job|job.snapshot())})
 }
 pub fn setup(app: &tauri::App) -> Result<()> {
     outbound::configure("unavailable", None);
@@ -1604,9 +1609,9 @@ fn start_workers(app: tauri::AppHandle, state: NetworkState) {
             let Ok(mut runtime) = guard_state.runtime.try_lock() else {
                 continue;
             };
-            let was_tripped = runtime.proxy_guard.tripped;
+            let before = (runtime.proxy_guard.tripped, runtime.proxy_guard.inspection);
             proxy_guard::reconcile(&mut runtime).await;
-            let changed = was_tripped != runtime.proxy_guard.tripped;
+            let changed = before != (runtime.proxy_guard.tripped, runtime.proxy_guard.inspection);
             drop(runtime);
             if changed {
                 let _ = guard_app.emit("network-runtime-changed", ());
@@ -1619,7 +1624,7 @@ fn start_workers(app: tauri::AppHandle, state: NetworkState) {
         loop {
             timer.tick().await;
             let mut runtime = state.runtime.lock().await;
-            let before = (runtime.phase.clone(), runtime.error.clone(), runtime.port);
+            let before = (runtime.phase.clone(), runtime.error.clone(), runtime.port, runtime.recovery_progress);
             let mut stale = false;
             if let Some(heartbeat) = &runtime.lease {
                 match heartbeat.latest() {
@@ -1629,6 +1634,7 @@ fn start_workers(app: tauri::AppHandle, state: NetworkState) {
                             if control(&runtime, "GET", "/version", None).await.is_ok() {
                                 runtime.port = Some(runtime.configured_port);
                                 runtime.error = None;
+                                runtime.recovery_progress = lease::RecoveryProgress::Idle;
                                 outbound::ready(
                                     runtime.port,
                                     runtime.generation,
@@ -1642,6 +1648,11 @@ fn start_workers(app: tauri::AppHandle, state: NetworkState) {
                     }
                     Err(detail) => {
                         stale = detail == lease::RenewalError::Stale && !runtime.recovery_required;
+                        runtime.recovery_progress = if runtime.recovery_required {
+                            lease::RecoveryProgress::Idle
+                        } else {
+                            lease::RecoveryProgress::Retrying
+                        };
                         if let Some(job) = &mut runtime.media {
                             job.cancel();
                         }
@@ -1672,7 +1683,7 @@ fn start_workers(app: tauri::AppHandle, state: NetworkState) {
                     outbound::core(None, runtime.generation, false);
                 }
             }
-            let changed = before != (runtime.phase.clone(), runtime.error.clone(), runtime.port);
+            let changed = before != (runtime.phase.clone(), runtime.error.clone(), runtime.port, runtime.recovery_progress);
             let generation = runtime.generation;
             drop(runtime);
             if changed {
@@ -1835,15 +1846,19 @@ async fn controller_request(state: &NetworkState, args: Value) -> Result<Value> 
         }
         if catalog.settings.close_connections_on_switch {
             let runtime = state.runtime.lock().await;
-            ensure!(
-                runtime.generation == generation,
-                "network generation changed after selection"
-            );
-            control(&runtime, "DELETE", "/connections", None).await?;
+            return Ok(finish_node_selection(&runtime, generation, response).await);
         }
     }
     Ok(response)
 }
+// Both the live selection and the catalog have committed before this optional cleanup.
+async fn finish_node_selection(runtime: &Runtime, generation: u64, response: Value) -> Value {
+    if runtime.generation == generation && control(runtime, "DELETE", "/connections", None).await.is_ok() {
+        return response;
+    }
+    json!({"ok":true,"selectionApplied":true,"connectionCleanup":"failed"})
+}
+
 async fn execute(
     app: &tauri::AppHandle,
     state: &NetworkState,
@@ -1873,15 +1888,16 @@ async fn execute(
                 .iter()
                 .find(|test| Some(test.id.as_str()) == args["id"].as_str())
                 .context("Connectivity test not found")?;
-            let (port, generation) = {
+            let (port, generation, selection_epoch) = {
                 let runtime = state.runtime.lock().await;
                 ensure!(
-                    runtime.phase == "running",
+                    runtime.phase == "running" && args["generation"].as_u64().is_none_or(|g| g == runtime.generation),
                     "Start Sivio network before testing"
                 );
                 (
                     runtime.port.context("Missing network port")?,
                     runtime.generation,
+                    outbound::selection_epoch(),
                 )
             };
             let client = reqwest::Client::builder()
@@ -1897,7 +1913,7 @@ async fn execute(
             {
                 let runtime = state.runtime.lock().await;
                 ensure!(
-                    runtime.generation == generation && runtime.phase == "running",
+                    runtime.generation == generation && runtime.phase == "running" && outbound::selection_epoch() == selection_epoch,
                     "Network changed during test; retry required"
                 );
             }
@@ -2615,18 +2631,31 @@ mod tests {
     async fn failed_cleanup_retains_resources_and_requires_explicit_retry() {
         let child = Command::new("/bin/sleep").arg("30")
             .stdin(std::process::Stdio::piped()).kill_on_drop(true).spawn().unwrap();
-        let mut runtime = Runtime { child: Some(child), phase: "running".into(), generation: 7, ..Default::default() };
+        let mut runtime = Runtime { child: Some(child), phase: "running".into(), generation: 7, recovery_progress: lease::RecoveryProgress::Retrying, ..Default::default() };
         assert!(stop_inner(&mut runtime).await.is_err());
         assert_eq!(runtime.phase, "failed");
         assert!(runtime.recovery_required);
+        assert_eq!(snapshot(&runtime)["recoveryRequired"], true);
+        assert_eq!(snapshot(&runtime)["recoveryStatus"], "idle");
         assert!(runtime.child.is_some());
         assert!(runtime.error.as_deref().unwrap().contains("cleanup incomplete"));
         runtime.child.as_mut().unwrap().kill().await.unwrap();
         stop_inner(&mut runtime).await.unwrap();
         assert_eq!(runtime.phase, "stopped");
         assert!(!runtime.recovery_required);
+        assert_eq!(snapshot(&runtime)["recoveryRequired"], false);
+        assert_eq!(snapshot(&runtime)["recoveryStatus"], "idle");
         assert!(runtime.child.is_none());
         assert!(runtime.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn cleanup_failure_after_node_commit_reports_partial_success() {
+        let runtime = Runtime { generation: 4, phase: "running".into(), ..Default::default() };
+        // A missing controller socket fails the post-commit DELETE.
+        let result = finish_node_selection(&runtime, 4, json!({"ok":true})).await;
+        assert_eq!(result["selectionApplied"], true);
+        assert_eq!(result["connectionCleanup"], "failed");
     }
 
     #[test]

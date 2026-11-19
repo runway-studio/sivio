@@ -14,6 +14,8 @@ import {
 import { RouteDecisionsDialog } from "@/components/models/RouteDecisionsDialog";
 import { modelHubApi, type ModelCatalog } from "@/lib/api/model-hub";
 import { createTestQueryClient } from "../utils/testQueryClient";
+import { http, HttpResponse } from "msw";
+import { server } from "../msw/server";
 vi.mock("@/lib/api/model-hub", () => ({
   modelHubApi: { catalog: vi.fn(), select: vi.fn(), decisions: vi.fn() },
 }));
@@ -355,7 +357,8 @@ it("keeps an unsaved model across catalog refresh and registers navigation prote
       <ModelPickerContent initialApp="claude" page setBusy={() => {}} />
     </QueryClientProvider>,
   );
-  await screen.findByRole("heading", { name: "Alpha" });
+  await screen.findByRole("option", { name: "Alpha" });
+  fireEvent.click(screen.getByText("自定义模型 ID"));
   fireEvent.change(screen.getByLabelText("modelHub.modelId"), {
     target: { value: "draft-model" },
   });
@@ -381,6 +384,25 @@ it("keeps an unsaved model across catalog refresh and registers navigation prote
   );
 });
 it("offers verification and client launch after configuration is saved", async () => {
+  server.use(
+    http.post("http://tauri.local/get_workspace_readiness", () =>
+      HttpResponse.json({
+        checks: [
+          {
+            id: "configuration",
+            state: "pass",
+            reasonCode: "configuration_saved",
+          },
+          {
+            id: "client_read",
+            state: "unknown",
+            reasonCode: "client_reload_unobserved",
+          },
+          { id: "model", state: "unknown", reasonCode: "model_unverified" },
+        ],
+      }),
+    ),
+  );
   const onVerify = vi.fn();
   mount(
     <ModelPickerContent
@@ -390,10 +412,45 @@ it("offers verification and client launch after configuration is saved", async (
       onVerify={onVerify}
     />,
   );
-  await screen.findByRole("heading", { name: "Alpha" });
+  await screen.findByRole("option", { name: "Alpha" });
   fireEvent.click(screen.getByRole("button", { name: "modelHub.apply" }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "验证与打开客户端" }),
+    ).toBeEnabled(),
+  );
   fireEvent.click(
-    await screen.findByRole("button", { name: "验证并打开客户端" }),
+    await screen.findByRole("button", { name: "验证与打开客户端" }),
   );
   expect(onVerify).toHaveBeenCalledWith("claude");
+});
+
+it("confirms client changes without losing a draft on cancellation", async () => {
+  const changed = vi.fn();
+  mount(
+    <ModelPickerContent
+      initialApp="claude"
+      page
+      setBusy={() => {}}
+      onClientChange={changed}
+    />,
+  );
+  await screen.findByRole("option", { name: "Alpha" });
+  fireEvent.change(screen.getByLabelText("模型", { exact: true }), {
+    target: { value: "alpha-only" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+  expect(screen.getByRole("dialog")).toHaveTextContent("放弃未应用的模型更改");
+  fireEvent.click(
+    within(screen.getByRole("dialog")).getByRole("button", {
+      name: "common.cancel",
+    }),
+  );
+  expect(screen.getByLabelText("模型", { exact: true })).toHaveValue(
+    "alpha-only",
+  );
+  expect(changed).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+  fireEvent.click(screen.getByRole("button", { name: "放弃并切换" }));
+  await waitFor(() => expect(changed).toHaveBeenCalledWith("codex"));
 });

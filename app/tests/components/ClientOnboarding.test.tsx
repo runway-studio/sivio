@@ -7,19 +7,16 @@ import { modelHubApi } from "@/lib/api/model-hub";
 import { ONBOARDING_KEY } from "@/lib/clientOnboarding";
 import { createTestQueryClient } from "../utils/testQueryClient";
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ i18n: { language: "en" } }),
+  useTranslation: () => ({ i18n: { language: "en" }, t: (key: string) => key }),
 }));
 vi.mock("@/lib/query/workspaceReadiness", () => ({
   useWorkspaceReadiness: vi.fn(),
 }));
-vi.mock("@/lib/api/model-hub", () => ({ modelHubApi: { catalog: vi.fn() } }));
+vi.mock("@/lib/api/model-hub", () => ({
+  modelHubApi: { catalog: vi.fn(), select: vi.fn() },
+}));
 vi.mock("@/components/overview/WorkspaceReadiness", () => ({
   WorkspaceReadiness: ({ fixedApp }: any) => <div>Readiness: {fixedApp}</div>,
-}));
-vi.mock("@/components/models/ModelPickerDialog", () => ({
-  ModelPickerContent: ({ fixedClient }: any) => (
-    <div>Model picker {String(fixedClient)}</div>
-  ),
 }));
 const callbacks = () => ({
   onClose: vi.fn(),
@@ -43,7 +40,7 @@ beforeEach(() => {
     isError: false,
   } as any);
   vi.mocked(modelHubApi.catalog).mockResolvedValue({
-    providers: [{ id: "p", name: "P", models: ["m"] }],
+    providers: [{ id: "p", name: "P", models: ["m", "draft-model"] }],
     providerId: "p",
     model: "m",
     mode: "direct",
@@ -130,4 +127,71 @@ it("storage failure keeps setup open and the previous record intact", async () =
   );
   expect(props.onClose).not.toHaveBeenCalled();
   spy.mockRestore();
+});
+
+async function startModelDraft() {
+  localStorage.setItem(
+    ONBOARDING_KEY,
+    JSON.stringify({
+      version: 1,
+      app: "claude",
+      step: "verify",
+      skipped: false,
+    }),
+  );
+  const props = mount();
+  await screen.findByText("Readiness: claude");
+  fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
+  fireEvent.click(await screen.findByRole("button", { name: "draft-model" }));
+  return props;
+}
+
+it("keeps the draft after a failed write and advances only after applying it", async () => {
+  const saved = {
+    ...(await modelHubApi.catalog("claude")),
+    model: "draft-model",
+    revision: "next",
+  };
+  vi.mocked(modelHubApi.select)
+    .mockRejectedValueOnce(new Error("write failed"))
+    .mockImplementationOnce(async () => {
+      vi.mocked(modelHubApi.catalog).mockResolvedValue(saved);
+      return saved;
+    });
+  await startModelDraft();
+  const apply = () =>
+    screen.getByRole("button", { name: "Apply and continue to verification" });
+  fireEvent.click(apply());
+  await screen.findByText("write failed");
+  expect(screen.getByRole("button", { name: "draft-model" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(JSON.parse(localStorage.getItem(ONBOARDING_KEY)!).step).toBe("model");
+  fireEvent.click(apply());
+  await screen.findByText("Readiness: claude");
+  expect(modelHubApi.select).toHaveBeenCalledWith(
+    "claude",
+    "p",
+    "draft-model",
+    "c",
+  );
+  expect(JSON.parse(localStorage.getItem(ONBOARDING_KEY)!).step).toBe("verify");
+});
+
+it("guards step navigation and closing the wizard with a model draft", async () => {
+  const props = await startModelDraft();
+  fireEvent.click(screen.getByRole("button", { name: "Verify model" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Keep editing" }));
+  expect(screen.getByRole("button", { name: "draft-model" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Continue later" }));
+  expect(props.onClose).not.toHaveBeenCalled();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Discard and leave" }),
+  );
+  expect(props.onClose).toHaveBeenCalledOnce();
+  expect(modelHubApi.select).not.toHaveBeenCalled();
 });

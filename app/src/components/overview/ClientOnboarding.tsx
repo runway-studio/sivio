@@ -30,6 +30,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 
 export function ClientOnboarding({
@@ -63,6 +64,13 @@ export function ClientOnboarding({
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [modelDirty, setModelDirty] = useState(false);
+  const [pendingLeave, setPendingLeave] = useState<() => void>();
+  function requestLeave(action: () => void) {
+    if (busy) return;
+    if (modelDirty) setPendingLeave(() => action);
+    else action();
+  }
   const app = progress.app;
   const readiness = useWorkspaceReadiness(app);
   const catalog = useQuery({
@@ -91,6 +99,7 @@ export function ClientOnboarding({
     };
     try {
       saveOnboarding(next);
+      reconciled.current = true;
       setProgress(next);
       setError("");
       return true;
@@ -110,6 +119,7 @@ export function ClientOnboarding({
     ) ?? false;
   const reconciled = useRef(false);
   useEffect(() => {
+    if (modelDirty) reconciled.current = true;
     if (
       reconciled.current ||
       !readiness.data ||
@@ -122,7 +132,14 @@ export function ClientOnboarding({
       ...old,
       step: resumeStep(old, configured, !!catalog.data?.model),
     }));
-  }, [readiness.data, readiness.isError, catalog.data, app, configured]);
+  }, [
+    readiness.data,
+    readiness.isError,
+    catalog.data,
+    app,
+    configured,
+    modelDirty,
+  ]);
   const step = progress.step;
   const labels: Record<OnboardingStep, string> = {
     choose: tr("选择客户端", "Choose client"),
@@ -133,7 +150,9 @@ export function ClientOnboarding({
     finish: tr("开始使用", "Start using"),
   };
   const skip = () => {
-    if (!busy && move(progress.step, true)) onClose();
+    requestLeave(() => {
+      if (move(progress.step, true)) onClose();
+    });
   };
   async function openClient() {
     setBusy(true);
@@ -203,7 +222,10 @@ export function ClientOnboarding({
                       size="sm"
                       variant={step === id ? "default" : "outline"}
                       disabled={busy}
-                      onClick={() => move(id as OnboardingStep)}
+                      onClick={() => {
+                        if (id !== step)
+                          requestLeave(() => move(id as OnboardingStep));
+                      }}
                     >
                       {label}
                     </Button>
@@ -312,20 +334,14 @@ export function ClientOnboarding({
                 </>
               )}
               {step === "model" && isProxyAppId(app) && (
-                <>
-                  <ModelPickerContent
-                    fixedClient
-                    initialApp={app}
-                    page
-                    setBusy={setBusy}
-                  />
-                  <Button
-                    disabled={busy || !catalog.data?.model}
-                    onClick={() => move("verify")}
-                  >
-                    {tr("继续验证", "Continue to verification")}
-                  </Button>
-                </>
+                <ModelPickerContent
+                  fixedClient
+                  initialApp={app}
+                  page
+                  setBusy={setBusy}
+                  onDirtyChange={setModelDirty}
+                  onContinue={() => move("verify")}
+                />
               )}
               {(step === "verify" || step === "finish") && (
                 <>
@@ -382,6 +398,25 @@ export function ClientOnboarding({
             {tr("稍后继续", "Continue later")}
           </Button>
         </div>
+        <ConfirmDialog
+          zIndex="top"
+          isOpen={!!pendingLeave}
+          title={tr(
+            "放弃未应用的模型更改？",
+            "Discard unapplied model changes?",
+          )}
+          message={tr(
+            "离开此步骤将丢弃当前模型草稿。",
+            "Leaving this step discards your model draft.",
+          )}
+          confirmText={tr("放弃并离开", "Discard and leave")}
+          cancelText={tr("继续编辑", "Keep editing")}
+          onCancel={() => setPendingLeave(undefined)}
+          onConfirm={() => {
+            setPendingLeave(undefined);
+            pendingLeave?.();
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

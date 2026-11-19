@@ -7,7 +7,7 @@ import {
   fireEvent,
   within,
 } from "@testing-library/react";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import { providersApi } from "@/lib/api/providers";
 import {
@@ -210,6 +210,10 @@ const renderApp = (AppComponent: ComponentType) => {
 };
 
 describe("App integration with MSW", () => {
+  // Preload the application graph outside individual interaction timeouts.
+  beforeAll(async () => {
+    await import("@/App");
+  });
   beforeEach(async () => {
     (await import("@/hooks/useViewMemory")).clearViewMemory();
     localStorage.removeItem("si-assist-domain-navigation");
@@ -264,6 +268,47 @@ describe("App integration with MSW", () => {
     expect(await screen.findByTestId("settings-page")).toBeInTheDocument();
   });
 
+  it("opens the network repair controls from an Overview recovery notice", async () => {
+    localStorage.setItem("si-assist-last-view", "overview");
+    server.use(
+      http.post("http://tauri.local/network_command", async ({ request }) => {
+        const { action } = (await request.json()) as { action: string };
+        if (action !== "snapshot") return;
+        return HttpResponse.json({
+          catalog: {
+            active: null,
+            profiles: [],
+            outbound: "direct",
+            settings: { mode: "rule", mixedPort: 7891 },
+          },
+          settingsRevision: "r1",
+          helper: null,
+          helperAuthorized: false,
+          helperCompatible: false,
+          runtime: {
+            phase: "failed",
+            recoveryRequired: true,
+            managed: true,
+            generation: 1,
+            port: null,
+            error: null,
+          },
+        });
+      }),
+    );
+    const { default: App } = await import("@/App");
+    renderApp(App);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "打开网络设置" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Clash 网络设置" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "安装 / 修复服务" }),
+    ).toBeInTheDocument();
+  });
+
   it("owns model tools in Models, keeps the page after saving and guards pending navigation", async () => {
     let model = "model-a";
     let finish!: () => void;
@@ -302,9 +347,10 @@ describe("App integration with MSW", () => {
     );
     const page = await screen.findByTestId("model-hub-page");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    fireEvent.click(
-      await within(page).findByRole("button", { name: "model-b" }),
-    );
+    await within(page).findByRole("option", { name: "model-b" });
+    fireEvent.change(within(page).getByLabelText("模型", { exact: true }), {
+      target: { value: "model-b" },
+    });
     fireEvent.click(
       within(page).getByRole("button", { name: "modelHub.apply" }),
     );
@@ -320,9 +366,7 @@ describe("App integration with MSW", () => {
     expect(within(page).getByLabelText("modelHub.modelId")).toHaveValue(
       "model-b",
     );
-    fireEvent.change(within(page).getByLabelText("modelHub.client"), {
-      target: { value: "codex" },
-    });
+    fireEvent.click(within(page).getByRole("button", { name: "Codex" }));
     fireEvent.click(
       directory().getByRole("button", { name: "nav.routeDecisions" }),
     );
@@ -354,9 +398,11 @@ describe("App integration with MSW", () => {
     fireEvent.click(
       directory().getByRole("button", { name: "nav.modelPicker" }),
     );
-    expect(await screen.findByLabelText("modelHub.client")).toHaveValue(
-      "codex",
-    );
+    expect(
+      await within(screen.getByTestId("model-hub-page")).findByRole("button", {
+        name: "Codex",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 
   it("covers basic provider flows via real hooks", async () => {

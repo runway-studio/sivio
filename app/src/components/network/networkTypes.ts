@@ -70,6 +70,11 @@ export type NetworkSnapshot = {
     managed: boolean;
     tun?: boolean;
     proxyGuardTripped?: boolean;
+    proxyGuardWaitingForNetwork?: boolean;
+    proxyGuardInspectionUnavailable?: boolean;
+    selectionEpoch?: number;
+    recoveryRequired?: boolean;
+    recoveryStatus?: "idle" | "retrying" | "waiting_for_network";
     port: number | null;
     active: string | null;
     error: string | null;
