@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 90
     outputs:
       tag: ${{ steps.source.outputs.tag }}
@@ -87,7 +87,7 @@ jobs:
         run: echo 'Raw build logs are not uploaded; inspect the bounded workflow diagnostics.'
   consumer:
     needs: build
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
